@@ -1,3 +1,0 @@
-*.bin binary
-*.png binary
-N6/patches/*.patch -text whitespace=-blank-at-eol,-blank-at-eof
