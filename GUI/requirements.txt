@@ -1,0 +1,6 @@
+customtkinter>=5.2.2
+tkintermapview>=1.29
+opencv-python>=4.11
+Pillow>=11.0
+matplotlib>=3.10
+pyserial>=3.5
