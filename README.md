@@ -56,7 +56,7 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
 
 ## 👥 2. 팀원 소개
 
-<table>
+<table width="100%">
   <tr>
     <td align="center" width="33%">
       <img src="docs/images/team/park-gyuhyeon.png" width="170" alt="박규현"><br>
@@ -76,7 +76,7 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
   </tr>
 </table>
 
-<table>
+<table width="100%">
   <tr>
     <td align="center" width="50%">
       <img src="docs/images/team/hong-sunhyeon.png" width="170" alt="홍순현"><br>
@@ -109,7 +109,7 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
 
 ### 3.2 구현 기기
 
-<table>
+<table width="100%">
   <tr>
     <td align="center" width="33%">
       <img src="docs/images/devices/drone.png" width="230" alt="드론"><br>
@@ -126,7 +126,7 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
   </tr>
 </table>
 
-<table>
+<table width="100%">
   <tr>
     <td align="center" width="50%">
       <img src="docs/images/devices/ar-device.png" width="260" alt="AR 기기"><br>
@@ -143,7 +143,7 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
 
 아래 이미지를 누르면 작품 소개영상으로 이동합니다.
 
-[![ProSearch 작품 소개영상](https://img.youtube.com/vi/uuq3NOce7dk/maxresdefault.jpg)](https://www.youtube.com/watch?v=uuq3NOce7dk)
+[![ProSearch 작품 소개영상](https://img.youtube.com/vi/uuq3NOce7dk/hqdefault.jpg)](https://www.youtube.com/watch?v=uuq3NOce7dk)
 
 ## 💻 5. 핵심 소스코드
 
