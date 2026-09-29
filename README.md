@@ -94,7 +94,6 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
 ## 💡 3. 시스템 구성도
 
 ```mermaid
-%%{init: {"themeVariables": {"fontSize": "17px"}, "flowchart": {"nodeSpacing": 35, "rankSpacing": 55}}}%%
 flowchart TB
     subgraph UAV["1. 드론 수색"]
         direction TB
