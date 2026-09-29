@@ -1,0 +1,4 @@
+../Core/Src/mpu6050.c:21:19:MPU6050_Init	40	static
+../Core/Src/mpu6050.c:90:6:MPU6050_Read_All	64	static
+../Core/Src/mpu6050.c:141:6:MPU6050_Calibrate_Gyro	128	static
+../Core/Src/mpu6050.c:172:6:MPU6050_Read_All_Calibrated	24	static

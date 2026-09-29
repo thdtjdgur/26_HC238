@@ -1,0 +1,2 @@
+../Core/Src/compass.c:19:6:Compass_Draw	64	static
+../Core/Src/compass.c:43:6:Compass_DrawWithValue	56	static

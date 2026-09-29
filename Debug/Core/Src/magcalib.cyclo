@@ -1,0 +1,10 @@
+../Core/Src/magcalib.c:17:13:mat3_mul_vec	1
+../Core/Src/magcalib.c:24:15:vec3_dot	1
+../Core/Src/magcalib.c:29:12:mat3_inv	2
+../Core/Src/magcalib.c:62:13:jacobi_eigen_sym3	15
+../Core/Src/magcalib.c:143:12:mat3_sym_sqrt	6
+../Core/Src/magcalib.c:177:13:jacobi_eigen_sym	11
+../Core/Src/magcalib.c:239:6:MagCalib_Init	1
+../Core/Src/magcalib.c:244:6:MagCalib_Push	3
+../Core/Src/magcalib.c:272:5:MagCalib_Solve	18
+../Core/Src/magcalib.c:354:6:MagCalib_Apply	1

@@ -1,0 +1,2 @@
+../Core/Src/compass.c:19:6:Compass_Draw	1
+../Core/Src/compass.c:43:6:Compass_DrawWithValue	1

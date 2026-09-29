@@ -1,0 +1,4 @@
+../Core/Src/hmc5883l.c:19:19:HMC5883L_Init	40	static
+../Core/Src/hmc5883l.c:64:6:HMC5883L_Read_Raw	40	static
+../Core/Src/hmc5883l.c:87:6:HMC5883L_Read_All	96	static
+../Core/Src/hmc5883l.c:153:5:HMC5883L_Calibrate	904	static
