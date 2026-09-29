@@ -8,7 +8,7 @@
 
 </div>
 
-## 1. 프로젝트 개요
+## 📌 1. 프로젝트 개요
 
 ### 1.1 소개
 
@@ -54,98 +54,134 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
 | 통신 | LoRa, UART, 자체 메시지 프로토콜 |
 | 지상국 | Python, PyQt, 지도 및 텔레메트리 시각화 |
 
-## 2. 팀원 소개
+## 👥 2. 팀원 소개
 
 <table>
   <tr>
-    <td align="center"><img src="docs/images/team/park-gyuhyeon.png" width="140" alt="박규현"></td>
-    <td align="center"><img src="docs/images/team/im-songju.png" width="140" alt="임송주"></td>
-    <td align="center"><img src="docs/images/team/song-seonghyeok.png" width="140" alt="송성혁"></td>
-    <td align="center"><img src="docs/images/team/hong-sunhyeon.png" width="140" alt="홍순현"></td>
-    <td align="center"><img src="docs/images/team/kim-juwon.png" width="140" alt="김주원"></td>
-  </tr>
-  <tr>
-    <th align="center">박규현</th>
-    <th align="center">임송주</th>
-    <th align="center">송성혁</th>
-    <th align="center">홍순현</th>
-    <th align="center">김주원</th>
-  </tr>
-  <tr>
-    <td align="center">드론 비행제어보드 개발</td>
-    <td align="center">드론 제어</td>
-    <td align="center">팀장<br>지상로봇 개발</td>
-    <td align="center">지상국 개발<br>기기 간 통신 개발</td>
-    <td align="center">AR 기기 개발</td>
+    <td align="center" width="33%">
+      <img src="docs/images/team/park-gyuhyeon.png" width="170" alt="박규현"><br>
+      <strong>박규현</strong><br>
+      드론 비행제어보드 개발
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/images/team/im-songju.png" width="170" alt="임송주"><br>
+      <strong>임송주</strong><br>
+      드론 제어
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/images/team/song-seonghyeok.png" width="170" alt="송성혁"><br>
+      <strong>송성혁</strong><br>
+      팀장 · 지상로봇 개발
+    </td>
   </tr>
 </table>
 
-## 3. 시스템 구성도
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/images/team/hong-sunhyeon.png" width="170" alt="홍순현"><br>
+      <strong>홍순현</strong><br>
+      지상국 및 기기 간 통신 개발
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/images/team/kim-juwon.png" width="170" alt="김주원"><br>
+      <strong>김주원</strong><br>
+      AR 기기 개발
+    </td>
+  </tr>
+</table>
+
+## 💡 3. 시스템 구성도
 
 ```mermaid
-flowchart LR
-    subgraph UAV[드론]
-        CAM[카메라] --> AI[STM32N6<br>사람 탐지]
-        SENSOR[IMU / GNSS / 기압 센서] --> FC[STM32H753<br>자세 및 모터 제어]
-        AI -->|탐지 이벤트| FC
+%%{init: {"themeVariables": {"fontSize": "17px"}, "flowchart": {"nodeSpacing": 35, "rankSpacing": 55}}}%%
+flowchart TB
+    subgraph UAV["1. 드론 수색"]
+        direction TB
+        U_CAM["카메라"] --> U_AI["<b>STM32N6</b><br/>사람 탐지"]
+        U_SENSOR["IMU · GNSS · 기압 센서"] --> U_CTRL["<b>STM32H753</b><br/>자세 및 모터 제어"]
+        U_AI --> U_POS["<b>요구조자 위치</b><br/>위도 · 경도"]
+        U_CTRL --> U_POS
     end
 
-    subgraph UGV[지상로봇]
-        USENSOR[GNSS / LiDAR / IMU / 엔코더] --> UC[ESP32-S3<br>MPPI / PID / FOC]
-        UC --> MOTOR[주행 및 자세제어]
+    subgraph UGV["2. 지상로봇 수색"]
+        direction TB
+        G_CAM["카메라"] --> G_AI["<b>STM32N6</b><br/>사람 탐지"]
+        G_SENSOR["GNSS · LiDAR · IMU · 엔코더"] --> G_CTRL["<b>ESP32-S3</b><br/>MPPI · PID · FOC"]
+        G_AI --> G_POS["<b>요구조자 위치</b><br/>위도 · 경도"]
+        G_CTRL --> G_POS
     end
 
-    subgraph AR[AR 기기]
-        ASENSOR[열화상 / GNSS / 방위 / 거리] --> HUD[현장 정보 HUD]
+    subgraph AR["3. AR 현장 수색"]
+        direction TB
+        A_SENSOR["열화상 · GNSS · 방위 · 거리"] --> A_HUD["AR HUD<br/>현장 정보 표시"]
+        A_HUD --> A_POS["<b>요구조자 위치</b><br/>위도 · 경도"]
     end
 
-    FC <-->|텔레메트리 / 탐지 정보| LORA[LoRa 통신망]
-    UC <-->|텔레메트리 / 이동 명령| LORA
-    HUD <-->|위치 / 탐지 정보| LORA
-    LORA <--> GS[Python 지상국 GUI]
-    GS -->|지상로봇 경로 지정| UC
+    subgraph BASE["4. 지상국 기지"]
+        direction TB
+        LORA["<b>LoRa 통신망</b><br/>탐지 위치 · 텔레메트리 수신<br/>지상로봇 이동 명령 송신"]
+        LORA --> GUI["<b>Python 지상국 GUI</b><br/>요구조자 위치와 기기 상태 표시"]
+    end
+
+    U_POS -->|"사람 위도·경도<br/>드론 상태"| LORA
+    G_POS -->|"사람 위도·경도<br/>지상로봇 상태"| LORA
+    A_POS -->|"사람 위도·경도<br/>AR 기기 상태"| LORA
+
+    U_POS ~~~ G_CAM
+    G_POS ~~~ A_SENSOR
+
+    classDef emphasis font-size:18px,font-weight:bold;
+    class U_POS,G_POS,A_POS,LORA,GUI emphasis;
 ```
 
 ### 3.1 동작 흐름
 
-1. 드론 카메라 영상은 STM32N6에서 처리되며, 사람이 탐지되면 이벤트를 비행제어부로 전달합니다.
-2. 드론과 지상로봇은 센서 데이터를 이용해 자세와 이동을 제어하고 텔레메트리를 생성합니다.
-3. LoRa 통신망은 탐지 결과, 위치, 기기 상태와 지상로봇 이동 명령을 교환합니다.
-4. 지상국 GUI는 기기 위치와 탐지 지점을 지도에 표시하고 통신 상태를 시각화합니다.
-5. AR 기기는 구조자에게 열화상, 방위, 거리와 좌표 정보를 HUD로 제공합니다.
+1. 드론과 지상로봇은 각각 STM32N6에서 카메라 영상을 처리해 사람을 탐지합니다.
+2. 드론, 지상로봇과 AR 기기는 탐지한 사람의 위도·경도를 계산해 LoRa로 지상국 기지에 전송합니다.
+3. 지상국 기지는 각 기기의 텔레메트리와 요구조자 위치를 수신해 Python GUI에 표시합니다.
+4. 지상국 GUI에서 지정한 지상로봇 이동 명령은 LoRa를 통해 지상로봇 제어기로 전달됩니다.
+5. AR 기기는 열화상, 방위, 거리와 좌표를 HUD에 표시해 구조자의 현장 판단을 지원합니다.
 
 ### 3.2 구현 기기
 
 <table>
   <tr>
-    <td align="center"><img src="docs/images/devices/drone.png" width="210" alt="드론"></td>
-    <td align="center"><img src="docs/images/devices/flight-controller.png" width="210" alt="드론 비행제어보드"></td>
-    <td align="center"><img src="docs/images/devices/ground-robot.png" width="210" alt="지상로봇"></td>
-  </tr>
-  <tr>
-    <th align="center">드론</th>
-    <th align="center">드론 비행제어보드</th>
-    <th align="center">지상로봇</th>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/images/devices/ar-device.png" width="210" alt="AR 기기"></td>
-    <td align="center"><img src="docs/images/devices/ground-station.png" width="420" alt="지상국 GUI"></td>
-    <td></td>
-  </tr>
-  <tr>
-    <th align="center">AR 기기</th>
-    <th align="center">지상국 GUI</th>
-    <th></th>
+    <td align="center" width="33%">
+      <img src="docs/images/devices/drone.png" width="230" alt="드론"><br>
+      <strong>드론</strong>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/images/devices/flight-controller.png" width="230" alt="드론 비행제어보드"><br>
+      <strong>드론 비행제어보드</strong>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/images/devices/ground-robot.png" width="230" alt="지상로봇"><br>
+      <strong>지상로봇</strong>
+    </td>
   </tr>
 </table>
 
-## 4. 작품 소개영상
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/images/devices/ar-device.png" width="260" alt="AR 기기"><br>
+      <strong>AR 기기</strong>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/images/devices/ground-station.png" width="520" alt="지상국 GUI"><br>
+      <strong>지상국 GUI</strong>
+    </td>
+  </tr>
+</table>
+
+## 🎬 4. 작품 소개영상
 
 아래 이미지를 누르면 작품 소개영상으로 이동합니다.
 
 [![ProSearch 작품 소개영상](https://img.youtube.com/vi/uuq3NOce7dk/maxresdefault.jpg)](https://www.youtube.com/watch?v=uuq3NOce7dk)
 
-## 5. 핵심 소스코드
+## 💻 5. 핵심 소스코드
 
 ### 5.1 디렉터리 구성
 
@@ -158,38 +194,63 @@ flowchart LR
 | [`Core`](Core/) | AR 기기 | 화면 표시, GNSS, 방위, 거리 측정과 LoRa 통신 |
 | [`GUI`](GUI/) | 지상국 | 지도, 영상, 기기 상태와 탐지 정보 표시 |
 
-### 5.2 주요 구현
+### 5.2 dq축 전압의 3상 변환
 
-#### 드론 자세제어
+- **소스코드 설명:** [`ground_station_robot/encoder.c`](ground_station_robot/encoder.c)는 PID 출력으로 정해진 d·q축 전압을 역 Park 변환으로 α·β축 전압으로 바꿉니다. 이어서 역 Clarke 변환을 적용해 좌우 BLDC 모터의 3상 전압 `Va`, `Vb`, `Vc`를 계산합니다.
 
-- [`DRONE/Core/Src/motor.c`](DRONE/Core/Src/motor.c)는 자세 오차와 각속도 오차를 단계적으로 보정하고, roll·pitch·yaw 제어값을 네 개 모터 출력으로 변환합니다.
-- [`DRONE/Core/Src/bno085.c`](DRONE/Core/Src/bno085.c)는 BNO085 회전 벡터를 수신해 비행 제어에 필요한 자세 정보를 제공합니다.
-- [`DRONE/Core/Src/gnss.c`](DRONE/Core/Src/gnss.c)는 UBX NAV-PVT 메시지에서 위치, 속도와 시간 정보를 해석합니다.
+```c
+float Vq_l = -Vq_left;
+float Vq_r = Vq_right;
+float Vd = 0.0f;
 
-#### Edge AI 사람 탐지
+int pole_pairs = 11;
+float ele_angle_l = (angle_l - offset_l) * (float)pole_pairs;
+float ele_angle_r = (angle_r - offset_r) * (float)pole_pairs;
 
-- [`N6/src/main.c`](N6/src/main.c)는 신경망 출력 후처리와 사람 판정을 수행합니다. 같은 대상이 계속 보일 때 탐지 신호가 반복되지 않도록 상태를 유지하고, 새로운 탐지 시 제어보드로 펄스 신호를 보냅니다.
-- 모델 플래시와 펌웨어 빌드 절차는 [`N6/README.md`](N6/README.md)에 정리했습니다.
+// Left motor: inverse Park transform
+float V_alpha_l = Vd * cosf(ele_angle_l) - Vq_l * sinf(ele_angle_l);
+float V_beta_l  = Vd * sinf(ele_angle_l) + Vq_l * cosf(ele_angle_l);
 
-#### LoRa 통신
+// Left motor: inverse Clarke transform
+float Va_l = V_alpha_l;
+float Vb_l = -0.5f * V_alpha_l + (sqrtf(3.0f) / 2.0f) * V_beta_l;
+float Vc_l = -0.5f * V_alpha_l - (sqrtf(3.0f) / 2.0f) * V_beta_l;
 
-- [`TTGO/include/master_scheduler.h`](TTGO/include/master_scheduler.h)는 반이중 LoRa 채널에서 지상로봇 보정정보 전송, 응답 수신과 드론 상태 확인 순서를 상태 머신으로 관리합니다.
-- 메시지 종류와 통신기 빌드 방법은 [`TTGO/README.md`](TTGO/README.md)에 정리했습니다.
+// Right motor: inverse Park transform
+float V_alpha_r = Vd * cosf(ele_angle_r) - Vq_r * sinf(ele_angle_r);
+float V_beta_r  = Vd * sinf(ele_angle_r) + Vq_r * cosf(ele_angle_r);
 
-#### 지상로봇 자율주행
+// Right motor: inverse Clarke transform
+float Va_r = V_alpha_r;
+float Vb_r = -0.5f * V_alpha_r + (sqrtf(3.0f) / 2.0f) * V_beta_r;
+float Vc_r = -0.5f * V_alpha_r - (sqrtf(3.0f) / 2.0f) * V_beta_r;
+```
 
-- [`ground_station_robot/mppi.c`](ground_station_robot/mppi.c)는 다수의 제어 입력을 예측해 경로 오차, 자세 안정성과 LiDAR 장애물 거리를 함께 평가합니다.
-- [`ground_station_robot/waypoint.c`](ground_station_robot/waypoint.c)는 전달받은 경유점을 순서대로 관리하고 도착 여부를 판단합니다.
-- [`ground_station_robot/pid.c`](ground_station_robot/pid.c)는 속도, 자세와 방향 제어에 사용하는 PID 계산을 담당합니다.
+### 5.3 MPPI 경로 비용 합산
 
-#### AR HUD
+- **소스코드 설명:** [`ground_station_robot/mppi.c`](ground_station_robot/mppi.c)는 각 후보 제어 입력으로 미래 상태를 예측합니다. 각 시점의 목표 위치, 진행 방향, 장애물, 제어 입력 크기와 입력 변화량 비용을 모두 더해 후보 경로의 총비용을 계산합니다.
 
-- [`Core/Src/main.c`](Core/Src/main.c)는 화면, GNSS, 방위 센서와 거리 측정기의 입력을 결합해 현장 정보를 표시합니다.
-- [`Core/Src/lora.c`](Core/Src/lora.c)는 디스플레이와 공유하는 SPI 버스를 전환하면서 LoRa 송수신을 처리합니다.
-- [`Core/Src/gps_neo_m8n.c`](Core/Src/gps_neo_m8n.c)와 [`Core/Src/lrf.c`](Core/Src/lrf.c)는 각각 위치 문장 해석과 레이저 거리 측정을 담당합니다.
+```c
+static float evaluate_input_sequence(const MPPI_State *start_state,
+                                     const MPPI_Input *sequence,
+                                     int horizon)
+{
+    float total_cost = 0.0f;
+    MPPI_State pred_state = *start_state;
+    MPPI_Input prev_input = prev_applied_input;
 
-#### 지상국 GUI
+    for (int t = 0; t < horizon; t++) {
+        pred_state = predict_next_state(&pred_state, &sequence[t]);
 
-- [`GUI/guitest.py`](GUI/guitest.py)는 지도, 카메라 화면, 드론·지상로봇 위치, 사람 탐지 지점과 통신 품질을 한 화면에 표시합니다.
-- [`GUI/ground_protocol.py`](GUI/ground_protocol.py)는 LoRa로 수신한 드론 및 지상로봇 텔레메트리를 GUI가 사용할 수 있는 데이터로 변환합니다.
-- 실행 환경과 설치 방법은 [`GUI/README.md`](GUI/README.md)에 정리했습니다.
+        total_cost += calc_goal_cost(&pred_state);
+        total_cost += calc_heading_cost(&pred_state);
+        total_cost += calc_sector_obstacle_cost(&pred_state, start_state);
+        total_cost += calc_input_cost(&sequence[t]);
+        total_cost += calc_smooth_cost(&sequence[t], &prev_input);
+
+        prev_input = sequence[t];
+    }
+
+    return total_cost;
+}
+```
