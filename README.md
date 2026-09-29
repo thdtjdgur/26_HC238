@@ -95,43 +95,40 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
 
 ```mermaid
 flowchart TB
-    subgraph UAV["1. 드론 수색"]
+    subgraph UAV[1. 드론 수색]
         direction TB
-        U_CAM["카메라"] --> U_AI["<b>STM32N6</b><br/>사람 탐지"]
-        U_SENSOR["IMU · GNSS · 기압 센서"] --> U_CTRL["<b>STM32H753</b><br/>자세 및 모터 제어"]
-        U_AI --> U_POS["<b>요구조자 위치</b><br/>위도 · 경도"]
+        U_CAM[카메라] --> U_AI[STM32N6<br>사람 탐지]
+        U_SENSOR[IMU · GNSS · 기압 센서] --> U_CTRL[STM32H753<br>자세 및 모터 제어]
+        U_AI --> U_POS[요구조자 위치<br>위도 · 경도]
         U_CTRL --> U_POS
     end
 
-    subgraph UGV["2. 지상로봇 수색"]
+    subgraph UGV[2. 지상로봇 수색]
         direction TB
-        G_CAM["카메라"] --> G_AI["<b>STM32N6</b><br/>사람 탐지"]
-        G_SENSOR["GNSS · LiDAR · IMU · 엔코더"] --> G_CTRL["<b>ESP32-S3</b><br/>MPPI · PID · FOC"]
-        G_AI --> G_POS["<b>요구조자 위치</b><br/>위도 · 경도"]
+        G_CAM[카메라] --> G_AI[STM32N6<br>사람 탐지]
+        G_SENSOR[GNSS · LiDAR · IMU · 엔코더] --> G_CTRL[ESP32-S3<br>MPPI · PID · FOC]
+        G_AI --> G_POS[요구조자 위치<br>위도 · 경도]
         G_CTRL --> G_POS
     end
 
-    subgraph AR["3. AR 현장 수색"]
+    subgraph AR[3. AR 현장 수색]
         direction TB
-        A_SENSOR["열화상 · GNSS · 방위 · 거리"] --> A_HUD["AR HUD<br/>현장 정보 표시"]
-        A_HUD --> A_POS["<b>요구조자 위치</b><br/>위도 · 경도"]
+        A_SENSOR[열화상 · GNSS · 방위 · 거리] --> A_HUD[AR HUD<br>현장 정보 표시]
+        A_HUD --> A_POS[요구조자 위치<br>위도 · 경도]
     end
 
-    subgraph BASE["4. 지상국 기지"]
+    subgraph BASE[4. 지상국 기지]
         direction TB
-        LORA["<b>LoRa 통신망</b><br/>탐지 위치 · 텔레메트리 수신<br/>지상로봇 이동 명령 송신"]
-        LORA --> GUI["<b>Python 지상국 GUI</b><br/>요구조자 위치와 기기 상태 표시"]
+        LORA[LoRa 통신망<br>탐지 위치 · 텔레메트리 수신<br>지상로봇 이동 명령 송신]
+        LORA --> GUI[Python 지상국 GUI<br>요구조자 위치와 기기 상태 표시]
     end
 
-    U_POS -->|"사람 위도·경도<br/>드론 상태"| LORA
-    G_POS -->|"사람 위도·경도<br/>지상로봇 상태"| LORA
-    A_POS -->|"사람 위도·경도<br/>AR 기기 상태"| LORA
+    U_POS -->|사람 위도·경도 / 드론 상태| LORA
+    G_POS -->|사람 위도·경도 / 지상로봇 상태| LORA
+    A_POS -->|사람 위도·경도 / AR 기기 상태| LORA
 
     U_POS ~~~ G_CAM
     G_POS ~~~ A_SENSOR
-
-    classDef emphasis font-size:18px,font-weight:bold;
-    class U_POS,G_POS,A_POS,LORA,GUI emphasis;
 ```
 
 ### 3.1 동작 흐름
