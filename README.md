@@ -162,7 +162,15 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
 
 ## 💻 5. 핵심 소스코드
 
-### 5.1 디렉터리 구성
+### 5.1 장비별 핵심 코드
+
+| 대상 장비 | 핵심 기능 | 관련 경로 |
+| --- | --- | --- |
+| **지상로봇** | MPPI 경로 생성·평가, PID/FOC 기반 좌우 BLDC 모터 제어 | [`ground_station_robot`](ground_station_robot/) |
+
+아래에 소개하는 코드는 모두 **지상로봇에 실제 적용한 핵심 제어 코드**입니다. 드론, Edge AI, AR 기기와 지상국 코드는 디렉터리 구성에서 각각의 경로를 확인할 수 있습니다.
+
+### 5.2 전체 디렉터리 구성
 
 | 경로 | 담당 기능 | 주요 내용 |
 | --- | --- | --- |
@@ -173,9 +181,10 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
 | [`Core`](Core/) | AR 기기 | 화면 표시, GNSS, 방위, 거리 측정과 LoRa 통신 |
 | [`GUI`](GUI/) | 지상국 | 지도, 영상, 기기 상태와 탐지 정보 표시 |
 
-### 5.2 dq축 전압의 3상 변환
+### 5.3 지상로봇 - dq축 전압의 3상 변환
 
-- **소스코드 설명:** [`ground_station_robot/encoder.c`](ground_station_robot/encoder.c)는 PID 출력으로 정해진 d·q축 전압을 역 Park 변환으로 α·β축 전압으로 바꿉니다. 이어서 역 Clarke 변환을 적용해 좌우 BLDC 모터의 3상 전압 `Va`, `Vb`, `Vc`를 계산합니다.
+- **적용 장비:** 지상로봇
+- **소스코드 설명:** [`ground_station_robot/encoder.c`](ground_station_robot/encoder.c)는 PID 출력으로 정해진 d·q축 전압을 역 Park 변환으로 α·β축 전압으로 바꿉니다. 이어서 역 Clarke 변환을 적용해 지상로봇 좌우 BLDC 모터의 3상 전압 `Va`, `Vb`, `Vc`를 계산합니다.
 
 ```c
 float Vq_l = -Vq_left;
@@ -205,8 +214,9 @@ float Vb_r = -0.5f * V_alpha_r + (sqrtf(3.0f) / 2.0f) * V_beta_r;
 float Vc_r = -0.5f * V_alpha_r - (sqrtf(3.0f) / 2.0f) * V_beta_r;
 ```
 
-### 5.3 MPPI 후보 명령열 생성
+### 5.4 지상로봇 - MPPI 후보 명령열 생성
 
+- **적용 장비:** 지상로봇
 - **소스코드 설명:** [`ground_station_robot/mppi.c`](ground_station_robot/mppi.c)는 직전 최적 명령열을 한 스텝 앞으로 이동시킨 기준 명령열에서 새로운 후보를 만듭니다. 선속도 `v_ref`와 각속도 `w_ref`에 시간적으로 이어지는 노이즈를 더하고, 허용 범위로 제한해 급격히 끊기지 않는 여러 주행 명령열을 생성합니다. 현재 설정에서는 15스텝 길이의 후보 64개를 매 제어 주기마다 평가합니다.
 
 ```c
@@ -235,8 +245,9 @@ static void sample_input_sequence_from_base(MPPI_Input *dst,
 }
 ```
 
-### 5.4 MPPI 경로 비용 합산
+### 5.5 지상로봇 - MPPI 경로 비용 합산
 
+- **적용 장비:** 지상로봇
 - **소스코드 설명:** [`ground_station_robot/mppi.c`](ground_station_robot/mppi.c)는 각 후보 제어 입력으로 미래 상태를 예측합니다. 각 시점의 목표 위치, 진행 방향, 장애물, 제어 입력 크기와 입력 변화량 비용을 모두 더해 후보 경로의 총비용을 계산합니다.
 
 ```c
@@ -264,7 +275,7 @@ static float evaluate_input_sequence(const MPPI_State *start_state,
 }
 ```
 
-### 5.5 MPPI 제어 흐름
+### 5.6 지상로봇 - MPPI 제어 흐름
 
 1. 직전 최적 명령열을 한 스텝 이동해 이번 제어 주기의 기준 명령열을 구성합니다.
 2. 기준 명령열에 서로 다른 선속도·각속도 노이즈를 더해 64개의 후보 명령열을 생성합니다.
