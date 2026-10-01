@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="840" viewBox="0 0 1800 840" role="img" aria-labelledby="title desc">
+  <title id="title">ProSearch 시스템 구성도</title>
+  <desc id="desc">드론, 지상로봇, AR 기기와 지상국 기지가 LoRa 통신망으로 연결된 구조</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8c959f"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#58a6ff"/>
+    </marker>
+    <style>
+      .bg { fill: #0d1117; }
+      .panel { fill: #161b22; stroke: #484f58; stroke-width: 2; }
+      .header { fill: #21262d; }
+      .node { fill: #0d1117; stroke: #6e7681; stroke-width: 2; }
+      .output { fill: #0d1117; stroke: #8c959f; stroke-width: 2; }
+      .base-node { fill: #0d1117; stroke: #58a6ff; stroke-width: 2; }
+      .rule { stroke: #484f58; stroke-width: 2; }
+      .flow { fill: none; stroke: #8c959f; stroke-width: 3; marker-end: url(#arrow); }
+      .radio { fill: none; stroke: #58a6ff; stroke-width: 4; }
+      .radio-out { fill: none; stroke: #58a6ff; stroke-width: 4; marker-end: url(#arrow-blue); }
+      .radio-both { fill: none; stroke: #58a6ff; stroke-width: 4; marker-start: url(#arrow-blue); marker-end: url(#arrow-blue); }
+      .join { fill: #58a6ff; }
+      .title { fill: #f0f6fc; font: 700 27px 'Noto Sans KR', 'Malgun Gothic', sans-serif; }
+      .label { fill: #f0f6fc; font: 700 22px 'Noto Sans KR', 'Malgun Gothic', sans-serif; text-anchor: middle; }
+      .body { fill: #c9d1d9; font: 500 19px 'Noto Sans KR', 'Malgun Gothic', sans-serif; text-anchor: middle; }
+      .small { fill: #8c959f; font: 500 17px 'Noto Sans KR', 'Malgun Gothic', sans-serif; text-anchor: middle; }
+      .bus-label { fill: #f0f6fc; font: 700 20px 'Noto Sans KR', 'Malgun Gothic', sans-serif; text-anchor: middle; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1800" height="840"/>
+
+  <!-- Drone -->
+  <rect class="panel" x="40" y="30" width="1080" height="270" rx="4"/>
+  <rect class="header" x="41" y="31" width="1078" height="54" rx="3"/>
+  <line class="rule" x1="40" y1="85" x2="1120" y2="85"/>
+  <text class="title" x="68" y="67">드론 수색</text>
+
+  <rect class="node" x="75" y="110" width="210" height="66" rx="3"/>
+  <text class="label" x="180" y="151">카메라</text>
+  <rect class="node" x="365" y="110" width="240" height="66" rx="3"/>
+  <text class="label" x="485" y="139">STM32N6</text>
+  <text class="body" x="485" y="165">사람 탐지</text>
+
+  <rect class="node" x="75" y="208" width="210" height="66" rx="3"/>
+  <text class="body" x="180" y="235">IMU · GNSS</text>
+  <text class="body" x="180" y="261">기압 센서</text>
+  <rect class="node" x="365" y="208" width="240" height="66" rx="3"/>
+  <text class="label" x="485" y="237">STM32H753</text>
+  <text class="body" x="485" y="263">자세 · 모터 제어</text>
+
+  <rect class="output" x="720" y="135" width="360" height="104" rx="3"/>
+  <text class="label" x="900" y="173">LoRa 송신</text>
+  <text class="body" x="900" y="204">사람 위치 · 드론 상태</text>
+
+  <path class="flow" d="M285 143 H365"/>
+  <path class="flow" d="M285 241 H365"/>
+  <path class="flow" d="M605 143 H680 V166 H720"/>
+  <path class="flow" d="M605 241 H680 V208 H720"/>
+
+  <!-- Ground robot -->
+  <rect class="panel" x="40" y="325" width="1080" height="270" rx="4"/>
+  <rect class="header" x="41" y="326" width="1078" height="54" rx="3"/>
+  <line class="rule" x1="40" y1="380" x2="1120" y2="380"/>
+  <text class="title" x="68" y="362">지상로봇 수색</text>
+
+  <rect class="node" x="75" y="405" width="210" height="66" rx="3"/>
+  <text class="label" x="180" y="446">카메라</text>
+  <rect class="node" x="365" y="405" width="240" height="66" rx="3"/>
+  <text class="label" x="485" y="434">STM32N6</text>
+  <text class="body" x="485" y="460">사람 탐지</text>
+
+  <rect class="node" x="75" y="503" width="210" height="66" rx="3"/>
+  <text class="body" x="180" y="530">GNSS · LiDAR</text>
+  <text class="body" x="180" y="556">IMU · 엔코더</text>
+  <rect class="node" x="365" y="503" width="240" height="66" rx="3"/>
+  <text class="label" x="485" y="532">ESP32-S3</text>
+  <text class="body" x="485" y="558">MPPI · PID · FOC</text>
+
+  <rect class="output" x="720" y="430" width="360" height="104" rx="3"/>
+  <text class="label" x="900" y="468">LoRa 송수신</text>
+  <text class="body" x="900" y="498">사람 위치 · 로봇 상태</text>
+  <text class="small" x="900" y="522">지상국 이동 명령 수신</text>
+
+  <path class="flow" d="M285 438 H365"/>
+  <path class="flow" d="M285 536 H365"/>
+  <path class="flow" d="M605 438 H680 V461 H720"/>
+  <path class="flow" d="M605 536 H680 V503 H720"/>
+
+  <!-- AR device -->
+  <rect class="panel" x="40" y="620" width="1080" height="180" rx="4"/>
+  <rect class="header" x="41" y="621" width="1078" height="54" rx="3"/>
+  <line class="rule" x1="40" y1="675" x2="1120" y2="675"/>
+  <text class="title" x="68" y="657">AR 현장 수색</text>
+
+  <rect class="node" x="250" y="700" width="250" height="70" rx="3"/>
+  <text class="body" x="375" y="729">열화상 · GNSS</text>
+  <text class="body" x="375" y="755">방위 · 거리</text>
+  <rect class="node" x="575" y="700" width="180" height="70" rx="3"/>
+  <text class="label" x="665" y="730">AR HUD</text>
+  <text class="small" x="665" y="755">현장 정보 표시</text>
+  <rect class="output" x="830" y="700" width="250" height="70" rx="3"/>
+  <text class="label" x="955" y="729">LoRa 송신</text>
+  <text class="small" x="955" y="755">사람 위치 · AR 상태</text>
+
+  <path class="flow" d="M500 735 H575"/>
+  <path class="flow" d="M755 735 H830"/>
+
+  <!-- LoRa bus -->
+  <rect class="node" x="1128" y="103" width="124" height="42" rx="3"/>
+  <text class="bus-label" x="1190" y="131">LoRa 통신망</text>
+  <path class="radio" d="M1190 155 V735"/>
+  <path class="radio-out" d="M1080 187 H1190"/>
+  <path class="radio-both" d="M1080 482 H1190"/>
+  <path class="radio-out" d="M1080 735 H1190"/>
+  <circle class="join" cx="1190" cy="187" r="7"/>
+  <circle class="join" cx="1190" cy="482" r="7"/>
+  <circle class="join" cx="1190" cy="735" r="7"/>
+
+  <!-- Ground station -->
+  <rect class="panel" x="1260" y="180" width="500" height="470" rx="4"/>
+  <rect class="header" x="1261" y="181" width="498" height="54" rx="3"/>
+  <line class="rule" x1="1260" y1="235" x2="1760" y2="235"/>
+  <text class="title" x="1288" y="217">지상국 기지</text>
+
+  <rect class="base-node" x="1310" y="285" width="400" height="135" rx="3"/>
+  <text class="label" x="1510" y="327">LoRa 수신 · 송신</text>
+  <text class="body" x="1510" y="361">탐지 위치 · 텔레메트리 수신</text>
+  <text class="body" x="1510" y="391">지상로봇 이동 명령 송신</text>
+
+  <rect class="node" x="1310" y="490" width="400" height="105" rx="3"/>
+  <text class="label" x="1510" y="531">Python 지상국 GUI</text>
+  <text class="body" x="1510" y="566">요구조자 위치 · 기기 상태 표시</text>
+
+  <path class="radio-both" d="M1190 352 H1310"/>
+  <path class="flow" d="M1510 420 V490"/>
+</svg>

@@ -102,8 +102,8 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
 ## 💡 3. 시스템 구성도
 
 <p align="center">
-  <a href="docs/images/system-architecture.png">
-    <img src="docs/images/system-architecture.png" width="540" alt="ProSearch 세로형 시스템 구성도">
+  <a href="docs/images/system-architecture.svg">
+    <img src="docs/images/system-architecture.svg" width="100%" alt="ProSearch 가로형 시스템 구성도">
   </a>
 </p>
 
