@@ -291,4 +291,4 @@ static float evaluate_input_sequence(const MPPI_State *start_state,
 | GUI | Python 3.12, CustomTkinter/Tkinter, OpenCV, tkintermapview, pyserial, NTRIP | [지도·영상·검출 위치·설치 및 실행](GUI/README.md) |
 | TTGO | ESP32, Arduino C++, PlatformIO, LoRa, RTCM3 / CRC24Q, SSD1306 OLED | [통신 중계·패킷·빌드 및 업로드](TTGO/README.md) |
 
-N6에서 사람 신뢰도가 70% 이상이면 Arduino D2(PD0)에 GPIO 펄스를 출력합니다. 로봇 ESP는 이 이벤트에 GPS 좌표와 검출 상태를 결합해 LoRa로 전송하고, TTGO가 PC로 중계하면 GUI가 해당 좌표에 초록색 발견 마커를 표시합니다. 각 구성요소의 역할, 설정값과 확인 절차는 위 README에서 확인할 수 있습니다.
+N6에서 사람 신뢰도가 70% 이상이면 Arduino D2(PD0)에 GPIO 펄스를 출력합니다. 로봇 ESP가 이 이벤트에 GPS 좌표와 검출 상태를 결합해 LoRa로 전송하고 TTGO가 PC로 중계하는 방식으로 연결합니다. 현재 GUI의 초록색 발견 마커는 UAV 메시지(`detected == 1`, `person_count > 0`)에 한정되어, UGV 검출 마커까지 연결하려면 추가 연동이 필요합니다. 각 구성요소의 역할, 설정값과 확인 절차는 위 README에서 확인할 수 있습니다.
