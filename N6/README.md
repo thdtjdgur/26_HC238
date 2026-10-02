@@ -4,6 +4,33 @@ NUCLEO-N657X0-Q와 카메라에서 YOLOv8n person 모델을 실행하고, 한 �
 
 사람이 계속 검출되는 동안에는 펄스를 반복하지 않는다. 검출이 사라진 뒤 다시 나타나면 새 펄스를 출력한다.
 
+## 개발환경 및 사용 기술
+
+| 구분 | 구성 |
+| --- | --- |
+| 대상 보드 | NUCLEO-N657X0-Q, STM32N657 / Cortex-M55 및 Neural-ART NPU |
+| 언어 | C, STM32 HAL / ST BSP |
+| 추론 모델 | YOLOv8n, 320×320 입력, 양자화 TFLite, person 단일 클래스 |
+| 모델 변환 | STM32AI Model Zoo Services, STEdgeAI 4.0 / x-cube-ai pack 12.0.0 |
+| 빌드 | STM32CubeIDE 1.17.0, GNU Tools for STM32 12.3.1 |
+| PC 도구 | Python 3.12.9, STM32CubeProgrammer |
+| 영상 출력 | UVCL 구성 / USB UVC |
+| 이벤트 출력 | Arduino D2(PD0), 3.3 V GPIO |
+
+## 주요 기능 및 처리 흐름
+
+1. ST 카메라 파이프라인에서 영상을 받아 모델 입력으로 전처리합니다.
+2. Neural-ART NPU에서 사람 객체 인식을 실행하고 후처리 결과를 얻습니다.
+3. 후처리 결과 중 신뢰도 `>= 0.70`인 검출이 한 번이라도 있으면 GPIO HIGH 출력을 시작합니다. 연속 프레임 확인을 기다리지 않습니다.
+4. GPIO는 추론 루프에서 200 ms 경과를 확인한 뒤 LOW로 복귀하므로 실제 펄스 길이는 루프 처리 시간에 따라 더 길 수 있습니다.
+5. ESP가 GPIO 이벤트를 감지해 GPS와 검출 플래그를 LoRa로 전달하고, 지상국 GUI가 수신 좌표를 표시합니다.
+
+N6 코드는 사람 검출과 GPIO 출력까지 담당합니다. ESP의 검출 플래그 저장, GPS 결합 및 LoRa 패킷 송신은 로봇 측 코드의 담당 기능입니다.
+
+## 재현 범위
+
+이 디렉터리는 ST 프로젝트 전체 복사본이 아니라 변경 소스, 설정, upstream 패치와 플래시용 펌웨어를 제공합니다. 바로 실행하려면 아래 플래시 절차를 사용하고, 다시 빌드하려면 아래에 명시한 ST 저장소 커밋과 도구 버전에 변경 파일을 적용합니다.
+
 ## 배선
 
 - N6 Arduino D2(PD0) -> 로봇 ESP 입력 GPIO

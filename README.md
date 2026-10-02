@@ -56,7 +56,7 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
 | 지상로봇 | ESP32-S3, GNSS, LiDAR, MPPI, PID/FOC, C/C++ |
 | AR 기기 | STM32, 열화상 카메라, GNSS, 방위 센서, 레이저 거리 측정기 |
 | 통신 | LoRa, UART, 자체 메시지 프로토콜 |
-| 지상국 | Python, PyQt, 지도 및 텔레메트리 시각화 |
+| 지상국 | Python, CustomTkinter/Tkinter, OpenCV, tkintermapview, 텔레메트리 시각화 |
 
 <br><br>
 
@@ -282,3 +282,13 @@ static float evaluate_input_sequence(const MPPI_State *start_state,
 3. 각 후보를 15스텝 동안 예측하며 목표 거리, 진행 방향, 장애물, 입력 크기와 입력 변화량 비용을 합산합니다.
 4. 비용이 낮은 후보일수록 큰 가중치를 주고, 모든 후보를 가중 평균해 새로운 최적 명령열을 계산합니다.
 5. 최적 명령열의 첫 번째 입력만 현재 주기에 적용하고, 다음 주기에 같은 과정을 반복해 경로 변화와 장애물에 대응합니다.
+
+### 5.7 N6 · GUI · TTGO 개발환경 및 실행 안내
+
+| 구성요소 | 개발환경 및 주요 기술 | 기능 및 실행 문서 |
+| --- | --- | --- |
+| N6 | C, STM32N657 Neural-ART NPU, YOLOv8n 320×320, STEdgeAI 4.0, CubeIDE 1.17.0 / GCC 12.3.1 | [사람 인식·GPIO 신호·플래시 및 소스 재생성](N6/README.md) |
+| GUI | Python 3.12, CustomTkinter/Tkinter, OpenCV, tkintermapview, pyserial, NTRIP | [지도·영상·검출 위치·설치 및 실행](GUI/README.md) |
+| TTGO | ESP32, Arduino C++, PlatformIO, LoRa, RTCM3 / CRC24Q, SSD1306 OLED | [통신 중계·패킷·빌드 및 업로드](TTGO/README.md) |
+
+N6에서 사람 신뢰도가 70% 이상이면 Arduino D2(PD0)에 GPIO 펄스를 출력합니다. 로봇 ESP는 이 이벤트에 GPS 좌표와 검출 상태를 결합해 LoRa로 전송하고, TTGO가 PC로 중계하면 GUI가 해당 좌표에 초록색 발견 마커를 표시합니다. 각 구성요소의 역할, 설정값과 확인 절차는 위 README에서 확인할 수 있습니다.
