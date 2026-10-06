@@ -167,8 +167,8 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
 | 대상 장비 | 핵심 기능 | 관련 경로 |
 | --- | --- | --- |
 | **지상로봇** | MPPI 경로 생성·평가, PID/FOC 기반 좌우 BLDC 모터 제어 | [`ground_station_robot`](ground_station_robot/) |
-| **N6 Edge AI** | 사람 신뢰도 70% 판정 및 GPIO 이벤트 출력 | [`N6/src/main.c`](N6/src/main.c) |
-| **LoRa 지상 통신기** | RTCM 보정 데이터 분할 및 무선 송신 | [`TTGO/include/master_scheduler.h`](TTGO/include/master_scheduler.h) |
+| **N6 Edge AI** | Neural-ART NPU 기반 YOLOv8n 사람 탐지, GPIO 검출 이벤트 출력 | [`N6/src/main.c`](N6/src/main.c) |
+| **LoRa 지상 통신기** | TDMA 기반 UAV·UGV·AR 통신 스케줄링, RTCM 보정 데이터 분할 전송 | [`TTGO/include/master_scheduler.h`](TTGO/include/master_scheduler.h) |
 
 아래에는 **지상로봇 제어, N6 사람 검출 및 LoRa 통신의 핵심 코드**를 장비별로 소개합니다. 각 코드의 적용 장비와 소스 파일은 해당 항목에서 확인할 수 있습니다.
 
