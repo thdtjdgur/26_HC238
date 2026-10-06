@@ -288,7 +288,7 @@ static float evaluate_input_sequence(const MPPI_State *start_state,
 ### 5.7 N6 - 사람 검출 이벤트 및 GPIO 신호 출력
 
 - **적용 장비:** NUCLEO-N657X0-Q (STM32N6), 사람 수색용 카메라
-- **소스코드 설명:** [`N6/src/main.c`](N6/src/main.c)의 `PersonSignal_Update()`는 YOLOv8n 후처리 결과에서 신뢰도 70% 이상의 검출이 하나라도 있으면 Arduino D2(PD0)를 HIGH로 설정합니다. 연속 프레임 확인 없이 첫 검출에서 신호를 출력하며, 검출이 유지되는 동안에는 중복 출력을 막습니다. 검출이 사라지면 다시 신호를 낼 수 있도록 상태를 해제합니다. `PERSON_SIGNAL_CONFIDENCE`는 `0.70f`, `PERSON_SIGNAL_PULSE_MS`는 `200U`로 정의돼 있습니다. 펄스 종료는 추론 루프에서 확인하므로 실제 HIGH 시간은 200 ms보다 길어질 수 있습니다.
+- **소스코드 설명:** [`N6/src/main.c`](N6/src/main.c)는 사람 검출 신뢰도가 70% 이상이면 Arduino D2(PD0)에 GPIO 신호를 출력합니다. 같은 사람이 계속 검출될 때는 중복 신호를 막고, 검출이 사라진 뒤 다시 나타나면 새 신호를 출력합니다.
 
 ```c
 static void PersonSignal_Update(const od_pp_out_t *p_postprocess)
@@ -333,7 +333,7 @@ static void PersonSignal_Update(const od_pp_out_t *p_postprocess)
 ### 5.8 LoRa 통신 - RTCM 보정 데이터 분할 및 송신
 
 - **적용 장비:** 지상국 TTGO LoRa32 V2.1 (ESP32)
-- **소스코드 설명:** [`TTGO/include/master_scheduler.h`](TTGO/include/master_scheduler.h)의 `send_rtcm()`은 PC에서 전달된 RTCM 보정 프레임을 LoRa로 송신합니다. 전송 전에 데이터가 오래됐거나 남은 통신 시간에 들어가지 않으면 프레임 전체를 건너뜁니다. 126바이트 이하 프레임은 `A1 + SEQ` 헤더로 보내고, 큰 프레임은 124바이트씩 나누어 `A2 + SEQ + INDEX + COUNT` 헤더를 붙입니다. 각 무선 패킷은 최대 128바이트이며, `start()`가 실제 송신을 시작합니다. 송신 완료 처리는 스케줄러가 다음 조각으로 진행하도록 관리합니다. 이 함수는 클래스 내부의 멤버 함수로, 아래 코드는 해당 함수의 원문 발췌입니다.
+- **소스코드 설명:** [`TTGO/include/master_scheduler.h`](TTGO/include/master_scheduler.h)는 RTCM 보정 데이터를 LoRa로 송신합니다. 작은 프레임은 한 패킷으로 보내고, 큰 프레임은 순서와 조각 수를 붙여 분할 전송합니다.
 
 ```cpp
 void send_rtcm(uint32_t now) {
