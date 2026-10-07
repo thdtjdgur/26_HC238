@@ -209,25 +209,7 @@ motor_set_channels(motor_clamp_compare(base_compare - pitch_output + roll_output
 | 비행 안전 상태 머신 | 명시적 ARM/DISARM, 명령·IMU 타임아웃, 과도 기울기·저전압·비상입력 차단 | [`flight_control.c`](DRONE/Core/Src/flight_control.c) |
 | 상태 표시 | OLED와 UART로 초기화 상태, GNSS 정보, 제어 상태 및 진단 결과 출력 | [`oled.c`](DRONE/Core/Src/oled.c), [`debug.c`](DRONE/Core/Src/debug.c) |
 
-#### UART6 비행 명령
-
-UART6은 115200 bps, 8-N-1로 설정합니다. 각 명령 끝에는 CR 또는 LF를 붙이고, 실제 송신기는 `CMD`를 500 ms보다 짧은 주기로 계속 보내야 합니다.
-
-| 순서 | 명령 | 설명 |
-| --- | --- | --- |
-| 1 | `START` | 명령 세션 시작 |
-| 2 | `CMD,1000,0,0,0` | 최소 스로틀·수평 자세·Yaw 0 명령 등록 |
-| 3 | `ARM` | 사전 안전조건을 검사한 뒤 모터 활성화 |
-| 운용 | `CMD,<PWM>,<Roll>,<Pitch>,<Yaw rate>` | PWM 1000~1800, Roll/Pitch ±25°, Yaw rate ±120°/s 범위에서 제어 |
-| 정지 | `DISARM` | 모터 잠금 및 제어 명령 초기화 |
-| 확인 | `STATUS` | `DISARMED`, `ARMED`, `FAILSAFE` 상태와 차단 원인 조회 |
-
-ARM은 배터리 전압 13.4 V 이상, 최신 IMU 샘플 20 ms 이내, 기체 기울기 ±15° 이내, 스로틀 1020 이하이고 자세·Yaw 명령이 중앙 부근일 때만 허용됩니다. 비행 중 500 ms 명령 타임아웃, IMU 타임아웃, ±60° 초과 기울기, 2초 이상 13.2 V 미만 저전압 또는 비상입력이 발생하면 모터를 잠그고 `FAILSAFE`로 전환합니다.
-
-ARM 상태에서도 스로틀이 1050 이하이면 자세 보정 출력을 적용하지 않고 네 모터를 모두 최소 PWM 1000으로 유지합니다. 따라서 ARM 직후 자세 오차만으로 특정 모터가 회전하는 것을 방지합니다.
-
-> [!WARNING]
-> 처음 검증할 때는 반드시 프로펠러를 분리하십시오. 이 펌웨어의 빌드 성공은 기체별 모터 순서·회전 방향, 센서 축, 무게중심과 PID 게인이 실제 비행에 맞는다는 의미가 아닙니다.
+비행 안전 상태 머신은 센서·통신·배터리 상태를 확인한 뒤 모터를 활성화하며, 이상 상태가 감지되면 모터를 잠그고 `FAILSAFE`로 전환합니다. 세부 제한값과 UART 명령 처리는 [`flight_control.c`](DRONE/Core/Src/flight_control.c)와 [`debug.c`](DRONE/Core/Src/debug.c)에서 확인할 수 있습니다.
 
 ### 5.4 지상로봇 - dq축 전압의 3상 변환
 
