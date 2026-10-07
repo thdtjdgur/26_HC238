@@ -166,7 +166,7 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
 
 | 대상 장비 | 핵심 기능 | 관련 경로 |
 | --- | --- | --- |
-| **드론 비행제어보드** | IMU 자세 추정, 캐스케이드 자세제어, 4채널 모터 믹싱, GNSS·비행 로그 처리 | [`DRONE/Core/Src`](DRONE/Core/Src/) |
+| **드론 비행제어보드** | IMU 자세 추정, ANGLE/GPS 모드, 캐스케이드 자세제어와 4채널 모터 믹싱 | [`DRONE/Core/Src`](DRONE/Core/Src/) |
 | **지상로봇** | MPPI 경로 생성·평가, PID/FOC 기반 좌우 BLDC 모터 제어 | [`ground_station_robot`](ground_station_robot/) |
 | **N6 Edge AI** | Neural-ART NPU 기반 YOLOv8n 사람 탐지, GPIO 검출 이벤트 출력 | [`N6/src/main.c`](N6/src/main.c) |
 | **LoRa 지상 통신기** | TDMA 기반 UAV·UGV·AR 통신 스케줄링, RTCM 보정 데이터 분할 전송 | [`TTGO/include/master_scheduler.h`](TTGO/include/master_scheduler.h) |
@@ -177,7 +177,7 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
 
 | 경로 | 담당 기능 | 주요 내용 |
 | --- | --- | --- |
-| [`DRONE`](DRONE/) | 드론 비행제어 | 센서 입력, 자세 및 각속도 제어, 모터 출력 생성 |
+| [`DRONE`](DRONE/) | 드론 비행제어 | 센서 입력, 직접 자세제어, GPS 위치 추종과 모터 출력 생성 |
 | [`N6`](N6/) | Edge AI | 카메라 입력, 사람 탐지 후 제어보드에 탐지 신호 전달 |
 | [`TTGO`](TTGO/) | LoRa 지상 통신기 | 기기별 통신 순서 관리, 텔레메트리 및 명령 중계 |
 | [`ground_station_robot`](ground_station_robot/) | 지상로봇 | 균형 제어, 경로 추종, LiDAR 기반 장애물 회피 |
@@ -202,16 +202,71 @@ motor_set_channels(motor_clamp_compare(base_compare - pitch_output + roll_output
 
 | 기능 | 구현 내용 | 관련 코드 |
 | --- | --- | --- |
-| GNSS 수신 | u-blox 수신기를 115200 bps, Airborne 1g, 5 Hz UBX-NAV-PVT 출력으로 설정하고 위치·속도·정확도를 파싱 | [`gnss.c`](DRONE/Core/Src/gnss.c) |
-| GNSS 브리지 | PC와 GNSS UART 사이의 양방향 데이터 중계로 수신기 설정과 디버깅 지원 | [`uart_bridge.c`](DRONE/Core/Src/uart_bridge.c) |
+| GPS 위치 추종 | 목표 위치와 현재 위치·속도를 비교해 Roll/Pitch 목표각 생성 | [`navigation.c`](DRONE/Core/Src/navigation.c) |
 | 고속 비행 로그 | 자세·각속도 오차 임계값 전후 각 1,536개 샘플을 보존하고 최대 4개 이벤트 기록 | [`high_speed_log.c`](DRONE/Core/Src/high_speed_log.c) |
 | 배터리 감시 | ADC 측정값 20개 이동평균으로 4셀 배터리 전압과 잔량 계산 | [`main.c`](DRONE/Core/Src/main.c) |
 | 비행 안전 상태 머신 | 명시적 ARM/DISARM, 명령·IMU 타임아웃, 과도 기울기·저전압·비상입력 차단 | [`flight_control.c`](DRONE/Core/Src/flight_control.c) |
-| 상태 표시 | OLED와 UART로 초기화 상태, GNSS 정보, 제어 상태 및 진단 결과 출력 | [`oled.c`](DRONE/Core/Src/oled.c), [`debug.c`](DRONE/Core/Src/debug.c) |
+| 상태 표시 | OLED와 UART로 초기화 상태, 제어 모드 및 진단 결과 출력 | [`oled.c`](DRONE/Core/Src/oled.c), [`debug.c`](DRONE/Core/Src/debug.c) |
 
 비행 안전 상태 머신은 센서·통신·배터리 상태를 확인한 뒤 모터를 활성화하며, 이상 상태가 감지되면 모터를 잠그고 `FAILSAFE`로 전환합니다. 세부 제한값과 UART 명령 처리는 [`flight_control.c`](DRONE/Core/Src/flight_control.c)와 [`debug.c`](DRONE/Core/Src/debug.c)에서 확인할 수 있습니다.
 
-### 5.4 지상로봇 - dq축 전압의 3상 변환
+### 5.4 드론 - ANGLE/GPS 제어 모드
+
+- **적용 장비:** STM32H753 기반 드론 비행제어보드
+- **소스코드 설명:** [`DRONE/Core/Src/flight_control.c`](DRONE/Core/Src/flight_control.c)는 UART6으로 받은 모드에 따라 ANGLE 모드에서는 목표 자세를 직접 적용하고, GPS 모드에서는 위치 추종기가 계산한 Roll·Pitch 목표각을 적용합니다.
+
+```c
+roll_target_deg = current_command.roll_angle_deg;
+pitch_target_deg = current_command.pitch_angle_deg;
+
+if (flight_mode == FLIGHT_MODE_GPS)
+{
+    if ((!navigation_is_ready(FLIGHT_GPS_TIMEOUT_MS)) ||
+        (!navigation_compute_attitude_targets(&roll_target_deg, &pitch_target_deg)))
+    {
+        FlightEnterFailsafe(FLIGHT_FAILSAFE_GPS_TIMEOUT);
+        return;
+    }
+}
+
+motor_set_throttle(current_command.throttle_compare);
+motor_set_angle_targets(roll_target_deg, pitch_target_deg);
+motor_set_rate_targets(0.0f,
+                       0.0f,
+                       (flight_mode == FLIGHT_MODE_ANGLE) ? current_command.yaw_rate_dps : 0.0f);
+motor_rate_pid_update();
+```
+
+### 5.5 드론 - GPS 목표 위치 추종
+
+- **적용 장비:** STM32H753 기반 드론 비행제어보드
+- **소스코드 설명:** [`DRONE/Core/Src/navigation.c`](DRONE/Core/Src/navigation.c)는 목표 GPS와 현재 GPS의 차이를 북쪽·동쪽 거리로 변환합니다. 위치 오차와 이동속도를 이용해 이동 방향을 정하고, 기체 방위각을 기준으로 Roll·Pitch 목표각을 계산합니다.
+
+```c
+latitude_delta = target_latitude_deg_1e7 - navigation.current_latitude_deg_1e7;
+longitude_delta = target_longitude_deg_1e7 - navigation.current_longitude_deg_1e7;
+
+north_error_m = (float)latitude_delta * NAV_METERS_PER_DEG_1E7;
+east_error_m = (float)longitude_delta * NAV_METERS_PER_DEG_1E7 * cosf(latitude_rad);
+
+north_tilt_command_deg = (NAV_POSITION_KP_DEG_PER_M * north_error_m) -
+                         (NAV_VELOCITY_KD_DEG_PER_MPS * north_velocity_mps);
+east_tilt_command_deg = (NAV_POSITION_KP_DEG_PER_M * east_error_m) -
+                        (NAV_VELOCITY_KD_DEG_PER_MPS * east_velocity_mps);
+
+heading_rad = navigation.heading_deg * NAV_DEG_TO_RAD;
+forward_tilt_command_deg = (north_tilt_command_deg * cosf(heading_rad)) +
+                           (east_tilt_command_deg * sinf(heading_rad));
+right_tilt_command_deg = (-north_tilt_command_deg * sinf(heading_rad)) +
+                          (east_tilt_command_deg * cosf(heading_rad));
+
+roll_command_deg = NavigationClamp(NAV_ROLL_DIRECTION * right_tilt_command_deg,
+                                   -NAV_MAX_TILT_DEG, NAV_MAX_TILT_DEG);
+pitch_command_deg = NavigationClamp(NAV_PITCH_DIRECTION * forward_tilt_command_deg,
+                                    -NAV_MAX_TILT_DEG, NAV_MAX_TILT_DEG);
+```
+
+### 5.6 지상로봇 - dq축 전압의 3상 변환
 
 - **적용 장비:** 지상로봇
 - **소스코드 설명:** [`ground_station_robot/encoder.c`](ground_station_robot/encoder.c)는 PID 출력으로 정해진 d·q축 전압을 역 Park 변환으로 α·β축 전압으로 바꿉니다. 이어서 역 Clarke 변환을 적용해 지상로봇 좌우 BLDC 모터의 3상 전압 `Va`, `Vb`, `Vc`를 계산합니다.
@@ -244,7 +299,7 @@ float Vb_r = -0.5f * V_alpha_r + (sqrtf(3.0f) / 2.0f) * V_beta_r;
 float Vc_r = -0.5f * V_alpha_r - (sqrtf(3.0f) / 2.0f) * V_beta_r;
 ```
 
-### 5.5 지상로봇 - MPPI 후보 명령열 생성
+### 5.7 지상로봇 - MPPI 후보 명령열 생성
 
 - **적용 장비:** 지상로봇
 - **소스코드 설명:** [`ground_station_robot/mppi.c`](ground_station_robot/mppi.c)는 직전 최적 명령열을 한 스텝 앞으로 이동시킨 기준 명령열에서 새로운 후보를 만듭니다. 선속도 `v_ref`와 각속도 `w_ref`에 시간적으로 이어지는 노이즈를 더하고, 허용 범위로 제한해 급격히 끊기지 않는 여러 주행 명령열을 생성합니다. 현재 설정에서는 15스텝 길이의 후보 64개를 매 제어 주기마다 평가합니다.
@@ -275,7 +330,7 @@ static void sample_input_sequence_from_base(MPPI_Input *dst,
 }
 ```
 
-### 5.6 지상로봇 - MPPI 경로 비용 합산
+### 5.8 지상로봇 - MPPI 경로 비용 합산
 
 - **적용 장비:** 지상로봇
 - **소스코드 설명:** [`ground_station_robot/mppi.c`](ground_station_robot/mppi.c)는 각 후보 제어 입력으로 미래 상태를 예측합니다. 각 시점의 목표 위치, 진행 방향, 장애물, 제어 입력 크기와 입력 변화량 비용을 모두 더해 후보 경로의 총비용을 계산합니다.
@@ -305,7 +360,7 @@ static float evaluate_input_sequence(const MPPI_State *start_state,
 }
 ```
 
-### 5.7 지상로봇 - MPPI 제어 흐름
+### 5.9 지상로봇 - MPPI 제어 흐름
 
 1. 직전 최적 명령열을 한 스텝 이동해 이번 제어 주기의 기준 명령열을 구성합니다.
 2. 기준 명령열에 서로 다른 선속도·각속도 노이즈를 더해 64개의 후보 명령열을 생성합니다.
@@ -313,7 +368,7 @@ static float evaluate_input_sequence(const MPPI_State *start_state,
 4. 비용이 낮은 후보일수록 큰 가중치를 주고, 모든 후보를 가중 평균해 새로운 최적 명령열을 계산합니다.
 5. 최적 명령열의 첫 번째 입력만 현재 주기에 적용하고, 다음 주기에 같은 과정을 반복해 경로 변화와 장애물에 대응합니다.
 
-### 5.8 N6 - 사람 검출 이벤트 및 GPIO 신호 출력
+### 5.10 N6 - 사람 검출 이벤트 및 GPIO 신호 출력
 
 - **적용 장비:** NUCLEO-N657X0-Q (STM32N6), 사람 수색용 카메라
 - **소스코드 설명:** [`N6/src/main.c`](N6/src/main.c)는 사람 검출 신뢰도가 70% 이상이면 Arduino D2(PD0)에 GPIO 신호를 출력합니다. 같은 사람이 계속 검출될 때는 중복 신호를 막고, 검출이 사라진 뒤 다시 나타나면 새 신호를 출력합니다.
@@ -358,7 +413,7 @@ static void PersonSignal_Update(const od_pp_out_t *p_postprocess)
 }
 ```
 
-### 5.9 LoRa 통신 - RTCM 보정 데이터 분할 및 송신
+### 5.11 LoRa 통신 - RTCM 보정 데이터 분할 및 송신
 
 - **적용 장비:** 지상국 TTGO LoRa32 V2.1 (ESP32)
 - **소스코드 설명:** [`TTGO/include/master_scheduler.h`](TTGO/include/master_scheduler.h)는 RTCM 보정 데이터를 LoRa로 송신합니다. 작은 프레임은 한 패킷으로 보내고, 큰 프레임은 순서와 조각 수를 붙여 분할 전송합니다.
@@ -389,7 +444,7 @@ void send_rtcm(uint32_t now) {
 }
 ```
 
-### 5.10 LoRa 무선통신 - TDMA 기반 슬롯 스케줄링
+### 5.12 LoRa 무선통신 - TDMA 기반 슬롯 스케줄링
 
 AR 확장을 포함한 설계 기준으로, **UGV → UAV → AR 기기** 순서의 통신 슬롯을 구성합니다.
 
