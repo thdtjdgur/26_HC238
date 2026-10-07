@@ -3,6 +3,7 @@
 #include "gnss.h"
 #include "high_speed_log.h"
 #include "motor.h"
+#include "navigation.h"
 #include "oled.h"
 #include "main.h"
 #include "sensor.h"
@@ -93,6 +94,116 @@ static uint32_t high_speed_dump_last_send_tick = 0U;
 
 static HAL_StatusTypeDef UART6_DMATxEnqueue(const uint8_t *data, uint16_t length);
 
+/* UART6 control protocol:
+ *   START
+ *   MODE,ANGLE | MODE,0 | MODE,GPS | MODE,1
+ *   CMD,<pwm>,<roll_deg>,<pitch_deg>,<yaw_rate_dps>
+ *   GPS,<latitude_deg>,<longitude_deg>,<pwm>
+ *   HEARTBEAT | STATUS | NAVSTATUS | ARM | DISARM
+ */
+static bool DebugParseAngleCommand(const char *text,
+                                   uint16_t *throttle_compare,
+                                   float *roll_angle_deg,
+                                   float *pitch_angle_deg,
+                                   float *yaw_rate_dps)
+{
+  const char *cursor;
+  char *parse_end;
+  unsigned long throttle;
+
+  if ((text == NULL) || (throttle_compare == NULL) ||
+      (roll_angle_deg == NULL) || (pitch_angle_deg == NULL) ||
+      (yaw_rate_dps == NULL) || (strncmp(text, "CMD,", 4U) != 0))
+  {
+    return false;
+  }
+
+  cursor = &text[4];
+  throttle = strtoul(cursor, &parse_end, 10);
+  if ((parse_end == cursor) || (*parse_end != ',') || (throttle > UINT16_MAX))
+  {
+    return false;
+  }
+  cursor = parse_end + 1;
+
+  *roll_angle_deg = strtof(cursor, &parse_end);
+  if ((parse_end == cursor) || (*parse_end != ','))
+  {
+    return false;
+  }
+  cursor = parse_end + 1;
+
+  *pitch_angle_deg = strtof(cursor, &parse_end);
+  if ((parse_end == cursor) || (*parse_end != ','))
+  {
+    return false;
+  }
+  cursor = parse_end + 1;
+
+  *yaw_rate_dps = strtof(cursor, &parse_end);
+  if ((parse_end == cursor) || (*parse_end != '\0'))
+  {
+    return false;
+  }
+
+  *throttle_compare = (uint16_t)throttle;
+  return true;
+}
+
+static bool DebugParseGpsCommand(const char *text,
+                                 int32_t *latitude_deg_1e7,
+                                 int32_t *longitude_deg_1e7,
+                                 uint16_t *throttle_compare)
+{
+  const char *cursor;
+  char *parse_end;
+  double latitude_deg;
+  double longitude_deg;
+  unsigned long throttle;
+
+  if ((text == NULL) || (latitude_deg_1e7 == NULL) ||
+      (longitude_deg_1e7 == NULL) || (throttle_compare == NULL) ||
+      (strncmp(text, "GPS,", 4U) != 0))
+  {
+    return false;
+  }
+
+  cursor = &text[4];
+  latitude_deg = strtod(cursor, &parse_end);
+  if ((parse_end == cursor) || (*parse_end != ','))
+  {
+    return false;
+  }
+  cursor = parse_end + 1;
+
+  longitude_deg = strtod(cursor, &parse_end);
+  if ((parse_end == cursor) || (*parse_end != ','))
+  {
+    return false;
+  }
+  cursor = parse_end + 1;
+
+  throttle = strtoul(cursor, &parse_end, 10);
+  if ((parse_end == cursor) || (*parse_end != '\0'))
+  {
+    return false;
+  }
+
+  if ((latitude_deg < -90.0) || (latitude_deg > 90.0) ||
+      (longitude_deg < -180.0) || (longitude_deg > 180.0) ||
+      (throttle > UINT16_MAX))
+  {
+    return false;
+  }
+
+  *latitude_deg_1e7 = (int32_t)((latitude_deg * 10000000.0) +
+                                ((latitude_deg >= 0.0) ? 0.5 : -0.5));
+  *longitude_deg_1e7 = (int32_t)((longitude_deg * 10000000.0) +
+                                 ((longitude_deg >= 0.0) ? 0.5 : -0.5));
+  *throttle_compare = (uint16_t)throttle;
+  return true;
+}
+
 static void UART1_DMARxStart(void)
 {
   if (HAL_UARTEx_ReceiveToIdle_DMA(&huart1,
@@ -119,19 +230,30 @@ static void UART6_DMATxRespond(uint16_t length)
   static const uint8_t retry_text[] = "RETRY\r\n";
   static const uint8_t command_ack_text[] = "CMD_OK\r\n";
   static const uint8_t command_error_text[] = "CMD_ERROR\r\n";
+  static const uint8_t mode_ack_text[] = "MODE_OK\r\n";
+  static const uint8_t gps_ack_text[] = "GPS_OK\r\n";
+  static const uint8_t heartbeat_ack_text[] = "HEARTBEAT_OK\r\n";
   static const uint8_t arm_requested_text[] = "ARM_REQUESTED\r\n";
   static const uint8_t disarm_requested_text[] = "DISARM_REQUESTED\r\n";
   const uint8_t *tx_data = command_error_text;
   uint16_t tx_length = (uint16_t)(sizeof(command_error_text) - 1U);
   char rx_text[UART6_DMA_RX_BUFFER_SIZE];
-  char status_text[64];
-  unsigned long throttle_compare;
+  char status_text[128];
+  uint16_t angle_throttle_compare;
+  int32_t target_latitude_deg_1e7;
+  int32_t target_longitude_deg_1e7;
+  uint16_t gps_throttle_compare;
   float roll_angle_deg;
   float pitch_angle_deg;
   float yaw_rate_dps;
-  char trailing_character;
-  int parsed_fields;
   int status_length;
+  navigation_status_t navigation_status;
+  int north_error_cm;
+  int east_error_cm;
+  int distance_cm;
+  int heading_cdeg;
+  int roll_target_cdeg;
+  int pitch_target_cdeg;
 
   while ((length > 0U) &&
          ((uart6_dma_rx_buffer[length - 1U] == '\r') || (uart6_dma_rx_buffer[length - 1U] == '\n')))
@@ -179,8 +301,9 @@ static void UART6_DMATxRespond(uint16_t length)
     {
       status_length = snprintf(status_text,
                                sizeof(status_text),
-                               "STATE,%s,%s\r\n",
+                               "STATE,%s,%s,%s\r\n",
                                flight_control_state_text(),
+                               flight_control_mode_text(),
                                flight_control_failsafe_text());
       if ((status_length > 0) && (status_length < (int)sizeof(status_text)))
       {
@@ -188,23 +311,74 @@ static void UART6_DMATxRespond(uint16_t length)
       }
       return;
     }
+    else if (((strcmp(rx_text, "MODE,ANGLE") == 0) ||
+              (strcmp(rx_text, "MODE,0") == 0)) &&
+             flight_control_set_mode(FLIGHT_MODE_ANGLE))
+    {
+      tx_data = mode_ack_text;
+      tx_length = (uint16_t)(sizeof(mode_ack_text) - 1U);
+    }
+    else if (((strcmp(rx_text, "MODE,GPS") == 0) ||
+              (strcmp(rx_text, "MODE,1") == 0)) &&
+             flight_control_set_mode(FLIGHT_MODE_GPS))
+    {
+      tx_data = mode_ack_text;
+      tx_length = (uint16_t)(sizeof(mode_ack_text) - 1U);
+    }
+    else if ((strcmp(rx_text, "HEARTBEAT") == 0) &&
+             flight_control_refresh_command())
+    {
+      tx_data = heartbeat_ack_text;
+      tx_length = (uint16_t)(sizeof(heartbeat_ack_text) - 1U);
+    }
+    else if (strcmp(rx_text, "NAVSTATUS") == 0)
+    {
+      navigation_get_status(&navigation_status);
+      north_error_cm = (int)(navigation_status.north_error_m * 100.0f);
+      east_error_cm = (int)(navigation_status.east_error_m * 100.0f);
+      distance_cm = (int)(navigation_status.distance_m * 100.0f);
+      heading_cdeg = (int)(navigation_status.heading_deg * 100.0f);
+      roll_target_cdeg = (int)(navigation_status.roll_target_deg * 100.0f);
+      pitch_target_cdeg = (int)(navigation_status.pitch_target_deg * 100.0f);
+      status_length = snprintf(status_text,
+                               sizeof(status_text),
+                               "NAV,Ncm=%d,Ecm=%d,Dcm=%d,Hcdeg=%d,Rcdeg=%d,Pcdeg=%d\r\n",
+                               north_error_cm,
+                               east_error_cm,
+                               distance_cm,
+                               heading_cdeg,
+                               roll_target_cdeg,
+                               pitch_target_cdeg);
+      if ((status_length > 0) && (status_length < (int)sizeof(status_text)))
+      {
+        (void)UART6_DMATxEnqueue((const uint8_t *)status_text, (uint16_t)status_length);
+      }
+      return;
+    }
+    else if (DebugParseGpsCommand(rx_text,
+                                  &target_latitude_deg_1e7,
+                                  &target_longitude_deg_1e7,
+                                  &gps_throttle_compare) &&
+             flight_control_set_gps_target(target_latitude_deg_1e7,
+                                           target_longitude_deg_1e7,
+                                           gps_throttle_compare))
+    {
+      tx_data = gps_ack_text;
+      tx_length = (uint16_t)(sizeof(gps_ack_text) - 1U);
+    }
     else
     {
-      parsed_fields = sscanf(rx_text,
-                             "CMD,%lu,%f,%f,%f %c",
-                             &throttle_compare,
-                             &roll_angle_deg,
-                             &pitch_angle_deg,
-                             &yaw_rate_dps,
-                             &trailing_character);
-      if ((parsed_fields == 4) &&
-          (throttle_compare <= UINT16_MAX) &&
-          flight_control_set_command((uint16_t)throttle_compare,
+      if (DebugParseAngleCommand(rx_text,
+                                 &angle_throttle_compare,
+                                 &roll_angle_deg,
+                                 &pitch_angle_deg,
+                                 &yaw_rate_dps) &&
+          flight_control_set_command(angle_throttle_compare,
                                      roll_angle_deg,
                                      pitch_angle_deg,
                                      yaw_rate_dps))
       {
-        uart6_rx_float_value = (float)throttle_compare;
+        uart6_rx_float_value = (float)angle_throttle_compare;
         tx_data = command_ack_text;
         tx_length = (uint16_t)(sizeof(command_ack_text) - 1U);
       }
