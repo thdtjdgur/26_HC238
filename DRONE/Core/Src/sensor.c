@@ -8,6 +8,10 @@
 
 extern SPI_HandleTypeDef hspi2;
 
+static volatile uint32_t sensor_last_sample_tick = 0U;
+static volatile uint32_t sensor_sample_count = 0U;
+static volatile uint32_t sensor_error_count = 0U;
+
 #define IMU_CS_LOW()   HAL_GPIO_WritePin(SPI2_CS_GPIO_Port, SPI2_CS_Pin, GPIO_PIN_RESET)
 #define IMU_CS_HIGH()  HAL_GPIO_WritePin(SPI2_CS_GPIO_Port, SPI2_CS_Pin, GPIO_PIN_SET)
 
@@ -662,6 +666,9 @@ static void LSM6DSR_UpdateAttitude(const lsm6dsr_filtered_data_t *motion, float 
 
 HAL_StatusTypeDef sensor_init(void)
 {
+  sensor_last_sample_tick = 0U;
+  sensor_sample_count = 0U;
+  sensor_error_count = 0U;
   CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
   if ((DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) == 0U)
   {
@@ -733,6 +740,7 @@ void sensor_process(void)
   if (motion_read_error != 0U)
   {
     motion_read_error = 0U;
+    sensor_error_count++;
   }
 
   if (motion_sample_ready == 0U)
@@ -789,6 +797,28 @@ void sensor_process(void)
   LSM6DSR_UpdateTimingStatistics(sensor_latest_dt_us, dt_valid, dt_clamped);
   LSM6DSR_FilterMotion(&motion_sample);
   LSM6DSR_UpdateAttitude(&filtered_motion, dt_seconds);
+  sensor_last_sample_tick = HAL_GetTick();
+  sensor_sample_count++;
+}
+
+uint8_t sensor_is_healthy(uint32_t maximum_age_ms)
+{
+  if (sensor_sample_count == 0U)
+  {
+    return 0U;
+  }
+
+  return ((uint32_t)(HAL_GetTick() - sensor_last_sample_tick) <= maximum_age_ms) ? 1U : 0U;
+}
+
+uint32_t sensor_get_sample_count(void)
+{
+  return sensor_sample_count;
+}
+
+uint32_t sensor_get_error_count(void)
+{
+  return sensor_error_count;
 }
 
 void sensor_get_attitude(float *roll_deg, float *pitch_deg, float *yaw_deg)

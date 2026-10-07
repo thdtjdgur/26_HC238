@@ -18,6 +18,9 @@ extern volatile int imuimu;
 
 HAL_StatusTypeDef sensor_init(void);
 void sensor_process(void);
+uint8_t sensor_is_healthy(uint32_t maximum_age_ms);
+uint32_t sensor_get_sample_count(void);
+uint32_t sensor_get_error_count(void);
 void sensor_get_attitude(float *roll_deg, float *pitch_deg, float *yaw_deg);
 void sensor_get_timing_debug(float *latest_dt_us,
                              uint32_t *sample_count,

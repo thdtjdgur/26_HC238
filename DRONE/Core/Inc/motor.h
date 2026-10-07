@@ -10,6 +10,8 @@ extern volatile float motor_target_roll_angle_deg;
 extern volatile float motor_target_pitch_angle_deg;
 
 void motor_init(TIM_HandleTypeDef *htim);
+void motor_set_armed(uint8_t armed);
+uint8_t motor_is_armed(void);
 void motor_set_channels(uint32_t channel_1_compare,
                         uint32_t channel_2_compare,
                         uint32_t channel_3_compare,

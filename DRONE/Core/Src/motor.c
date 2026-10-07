@@ -6,9 +6,11 @@
 #include <stddef.h>
 
 static TIM_HandleTypeDef *motor_tim = NULL;
+static volatile uint8_t motor_armed = 0U;
 
 #define MOTOR_OUTPUT_MIN_COMPARE     1000U
 #define MOTOR_OUTPUT_MAX_COMPARE     2000U
+#define MOTOR_CONTROL_ENABLE_COMPARE 1050U
 #define MOTOR_RATE_PID_DT_SECONDS    (1.0f / 2000.0f)
 #define MOTOR_RATE_PID_OUTPUT_LIMIT  400.0f
 #define MOTOR_YAW_BIAS_ENABLE_COMPARE 1200.0f
@@ -280,39 +282,33 @@ void motor_init(TIM_HandleTypeDef *htim)
   }
 
   motor_tim = htim;
+  motor_armed = 0U;
   motor_reset_rate_pid();
 
   (void)HAL_TIM_PWM_Start(motor_tim, TIM_CHANNEL_1);
   (void)HAL_TIM_PWM_Start(motor_tim, TIM_CHANNEL_2);
   (void)HAL_TIM_PWM_Start(motor_tim, TIM_CHANNEL_3);
   (void)HAL_TIM_PWM_Start(motor_tim, TIM_CHANNEL_4);
-
-
-  OLED_Clear();
-  OLED_Printf(2, 0, "MOTOR Setting");
-  OLED_Printf(4, 0, "Press UP");
-  OLED_Update();
-
-  while(1)
-  {
-    switch_update();
-    if(sw_u_flag==1)
-    {
-      OLED_Clear();
-      OLED_Printf(4, 0, "Setting...");
-      OLED_Update();
-      motor_set_all(2000U);
-      HAL_Delay(3000);
-      motor_set_all(1000U);
-      HAL_Delay(3500);
-      OLED_Clear();
-      OLED_Printf(4, 0, "Finished!");
-      OLED_Update();
-      HAL_Delay(1500);
-      break;
-    }
-  }
   motor_stop();
+}
+
+void motor_set_armed(uint8_t armed)
+{
+  if (armed != 0U)
+  {
+    motor_reset_rate_pid();
+    motor_set_throttle(MOTOR_OUTPUT_MIN_COMPARE);
+    motor_armed = 1U;
+    return;
+  }
+
+  motor_armed = 0U;
+  motor_stop();
+}
+
+uint8_t motor_is_armed(void)
+{
+  return motor_armed;
 }
 
 void motor_set_all(uint32_t compare)
@@ -352,6 +348,14 @@ void motor_set_channels(uint32_t channel_1_compare,
                         uint32_t channel_3_compare,
                         uint32_t channel_4_compare)
 {
+  if (motor_armed == 0U)
+  {
+    channel_1_compare = MOTOR_OUTPUT_MIN_COMPARE;
+    channel_2_compare = MOTOR_OUTPUT_MIN_COMPARE;
+    channel_3_compare = MOTOR_OUTPUT_MIN_COMPARE;
+    channel_4_compare = MOTOR_OUTPUT_MIN_COMPARE;
+  }
+
   motor_channel_compare[0] = channel_1_compare;
   motor_channel_compare[1] = channel_2_compare;
   motor_channel_compare[2] = channel_3_compare;
@@ -621,6 +625,12 @@ void motor_rate_pid_update(void)
   float pitch_angle_target_deg;
   uint8_t pitch_integrator_enabled;
 
+  if (motor_armed == 0U)
+  {
+    motor_set_all(MOTOR_OUTPUT_MIN_COMPARE);
+    return;
+  }
+
   if (motor_throttle_ramp_active != 0U)
   {
     uint32_t elapsed_ms = HAL_GetTick() - motor_throttle_ramp_start_tick_ms;
@@ -641,6 +651,16 @@ void motor_rate_pid_update(void)
   }
 
   base_compare = (float)motor_throttle_compare;
+  if (motor_throttle_compare <= MOTOR_CONTROL_ENABLE_COMPARE)
+  {
+    motor_reset_rate_pid();
+    motor_roll_output = 0.0f;
+    motor_pitch_output = 0.0f;
+    motor_yaw_output = 0.0f;
+    motor_set_all(MOTOR_OUTPUT_MIN_COMPARE);
+    return;
+  }
+
   pitch_integrator_enabled = ((motor_throttle_ramp_active == 0U) &&
                               (motor_throttle_compare > MOTOR_PITCH_I_ENABLE_COMPARE)) ? 1U : 0U;
   roll_angle_target_deg = motor_target_roll_angle_deg + MOTOR_ROLL_ANGLE_TRIM_DEG;
