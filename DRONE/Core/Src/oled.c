@@ -174,7 +174,7 @@ void OLED_DrawPixel(uint8_t x, uint8_t y, uint8_t color)
     }
 }
 
-void OLED_Print(uint8_t row, uint8_t col, char *str)
+void OLED_Print(uint8_t row, uint8_t col, const char *str)
 {
     uint8_t x = (uint8_t)(col * 7U);
     uint8_t y = (uint8_t)(row * 8U);
