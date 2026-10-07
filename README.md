@@ -167,8 +167,10 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
 | 대상 장비 | 핵심 기능 | 관련 경로 |
 | --- | --- | --- |
 | **지상로봇** | MPPI 경로 생성·평가, PID/FOC 기반 좌우 BLDC 모터 제어 | [`ground_station_robot`](ground_station_robot/) |
+| **N6 Edge AI** | Neural-ART NPU 기반 YOLOv8n 사람 탐지, GPIO 검출 이벤트 출력 | [`N6/src/main.c`](N6/src/main.c) |
+| **LoRa 지상 통신기** | TDMA 기반 UAV·UGV·AR 통신 스케줄링, RTCM 보정 데이터 분할 전송 | [`TTGO/include/master_scheduler.h`](TTGO/include/master_scheduler.h) |
 
-아래에 소개하는 코드는 모두 **지상로봇에 실제 적용한 핵심 제어 코드**입니다. 드론, Edge AI, AR 기기와 지상국 코드는 디렉터리 구성에서 각각의 경로를 확인할 수 있습니다.
+아래에는 **지상로봇 제어, N6 사람 검출 및 LoRa 통신의 핵심 코드**를 장비별로 소개합니다. 각 코드의 적용 장비와 소스 파일은 해당 항목에서 확인할 수 있습니다.
 
 ### 5.2 전체 디렉터리 구성
 
@@ -283,12 +285,88 @@ static float evaluate_input_sequence(const MPPI_State *start_state,
 4. 비용이 낮은 후보일수록 큰 가중치를 주고, 모든 후보를 가중 평균해 새로운 최적 명령열을 계산합니다.
 5. 최적 명령열의 첫 번째 입력만 현재 주기에 적용하고, 다음 주기에 같은 과정을 반복해 경로 변화와 장애물에 대응합니다.
 
-### 5.7 N6 · GUI · TTGO 개발환경 및 실행 안내
+### 5.7 N6 - 사람 검출 이벤트 및 GPIO 신호 출력
 
-| 구성요소 | 개발환경 및 주요 기술 | 기능 및 실행 문서 |
-| --- | --- | --- |
-| N6 | C, STM32N657 Neural-ART NPU, YOLOv8n 320×320, STEdgeAI 4.0, CubeIDE 1.17.0 / GCC 12.3.1 | [사람 인식·GPIO 신호·플래시 및 소스 재생성](N6/README.md) |
-| GUI | Python 3.12, CustomTkinter/Tkinter, OpenCV, tkintermapview, pyserial, NTRIP | [지도·영상·검출 위치·설치 및 실행](GUI/README.md) |
-| TTGO | ESP32, Arduino C++, PlatformIO, LoRa, RTCM3 / CRC24Q, SSD1306 OLED | [통신 중계·패킷·빌드 및 업로드](TTGO/README.md) |
+- **적용 장비:** NUCLEO-N657X0-Q (STM32N6), 사람 수색용 카메라
+- **소스코드 설명:** [`N6/src/main.c`](N6/src/main.c)는 사람 검출 신뢰도가 70% 이상이면 Arduino D2(PD0)에 GPIO 신호를 출력합니다. 같은 사람이 계속 검출될 때는 중복 신호를 막고, 검출이 사라진 뒤 다시 나타나면 새 신호를 출력합니다.
 
-N6에서 사람 신뢰도가 70% 이상이면 Arduino D2(PD0)에 GPIO 펄스를 출력합니다. 로봇 ESP가 이 이벤트에 GPS 좌표와 검출 상태를 결합해 LoRa로 전송하고 TTGO가 PC로 중계하는 방식으로 연결합니다. 현재 GUI의 초록색 발견 마커는 UAV 메시지(`detected == 1`, `person_count > 0`)에 한정되어, UGV 검출 마커까지 연결하려면 추가 연동이 필요합니다. 각 구성요소의 역할, 설정값과 확인 절차는 위 README에서 확인할 수 있습니다.
+```c
+static void PersonSignal_Update(const od_pp_out_t *p_postprocess)
+{
+  static uint8_t detection_latched = 0U;
+  static uint8_t pulse_active = 0U;
+  static uint32_t pulse_started_at = 0U;
+  uint8_t person_detected = 0U;
+  uint32_t now = HAL_GetTick();
+
+  if ((pulse_active != 0U) && ((uint32_t)(now - pulse_started_at) >= PERSON_SIGNAL_PULSE_MS))
+  {
+    HAL_GPIO_WritePin(PERSON_SIGNAL_GPIO_PORT, PERSON_SIGNAL_GPIO_PIN, GPIO_PIN_RESET);
+    pulse_active = 0U;
+    printf("[PERSON] GPIO D2 LOW\r\n");
+  }
+
+  for (uint32_t i = 0U; i < p_postprocess->nb_detect; i++)
+  {
+    if (p_postprocess->pOutBuff[i].conf >= PERSON_SIGNAL_CONFIDENCE)
+    {
+      person_detected = 1U;
+      break;
+    }
+  }
+
+  if (person_detected == 0U)
+  {
+    detection_latched = 0U;
+  }
+  else if ((detection_latched == 0U) && (pulse_active == 0U))
+  {
+    HAL_GPIO_WritePin(PERSON_SIGNAL_GPIO_PORT, PERSON_SIGNAL_GPIO_PIN, GPIO_PIN_SET);
+    pulse_started_at = now;
+    pulse_active = 1U;
+    detection_latched = 1U;
+    printf("[PERSON] detected >=70%%, GPIO D2 HIGH\r\n");
+  }
+}
+```
+
+### 5.8 LoRa 통신 - RTCM 보정 데이터 분할 및 송신
+
+- **적용 장비:** 지상국 TTGO LoRa32 V2.1 (ESP32)
+- **소스코드 설명:** [`TTGO/include/master_scheduler.h`](TTGO/include/master_scheduler.h)는 RTCM 보정 데이터를 LoRa로 송신합니다. 작은 프레임은 한 패킷으로 보내고, 큰 프레임은 순서와 조각 수를 붙여 분할 전송합니다.
+
+```cpp
+void send_rtcm(uint32_t now) {
+    while(frame_<4) {
+        Frame &f=active_[frame_];
+        if(!f.size) { ++frame_; continue; }
+        if(offset_==0) {
+            if(now-f.at>FRESH || !fits(now,frame_budget(f.size)+budget(1)+RESPONSE+GUARD)) {
+                io_.event(now-f.at>FRESH?"RTCM_STALE":"RTCM_OVER_BUDGET",UGV,frame_);
+                ++frame_; continue; // discard only a whole frame, never arbitrary bytes
+            }
+            ++rtcm_seq_;
+        }
+        if(f.size<=126) {
+            packet_[0]=0xA1; packet_[1]=rtcm_seq_; last_data_=f.size;
+            memcpy(packet_+2,f.data,f.size); start(now,f.size+2);
+        } else {
+            last_data_=f.size-offset_>124?124:f.size-offset_;
+            packet_[0]=0xA2; packet_[1]=rtcm_seq_; packet_[2]=offset_/124; packet_[3]=(f.size+123)/124;
+            memcpy(packet_+4,f.data+offset_,last_data_); start(now,last_data_+4);
+        }
+        return;
+    }
+    state_=State::UGV_GRANT_TX;
+}
+```
+
+### 5.9 LoRa 무선통신 - TDMA 기반 슬롯 스케줄링
+
+AR 확장을 포함한 설계 기준으로, **UGV → UAV → AR 기기** 순서의 통신 슬롯을 구성합니다.
+
+1. 지상국 TTGO가 3초 통신 주기를 관리하고, 기기별 송수신 슬롯과 제어 명령 구간을 순차적으로 배정합니다.
+2. UGV 슬롯에서는 RTCM 보정 데이터를 전송한 뒤 응답 구간을 열어 GPS 좌표와 탐지·주행 상태를 수신합니다.
+3. UAV 슬롯에서는 Poll 요청으로 송신 권한을 부여하고, GPS 좌표와 사람 탐지 정보를 수신합니다.
+4. AR 슬롯에서는 Poll 요청으로 송신 권한을 부여하고, GPS 좌표와 현장 기기 상태를 수신합니다.
+5. 슬롯 사이에 보호 시간을 적용하고, 응답 시간 초과 시 다음 슬롯으로 전환해 전체 주기와 통신 순서를 유지합니다.
