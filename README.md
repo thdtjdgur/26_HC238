@@ -85,7 +85,7 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
 <table width="100%">
   <tr>
     <td align="center" width="50%">
-      <img src="docs/images/team/hong-sunhyeon.png" width="170" alt="홍순현"><br>
+      <img src="docs/images/team/hong-soonhyun.png" width="170" alt="홍순현"><br>
       <strong>홍순현</strong><br>
       지상국 및 기기 간 통신 개발
     </td>
