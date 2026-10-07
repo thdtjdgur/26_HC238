@@ -1,4 +1,5 @@
 #include "debug.h"
+#include "flight_control.h"
 #include "gnss.h"
 #include "high_speed_log.h"
 #include "motor.h"
@@ -17,6 +18,7 @@ extern TIM_HandleTypeDef htim3;
 extern uint32_t user_step_throttle_compare;
 extern float battery_voltage;
 extern int8_t battery_percent;
+extern uint8_t battery_valid;
 
 #define UART1_DMA_TX_QUEUE_LENGTH 8U
 #define UART1_DMA_TX_BUFFER_SIZE  160U
@@ -25,7 +27,7 @@ extern int8_t battery_percent;
 #define UART1_TRIGGER_HOLD_MS      1000U
 #define UART6_DMA_TX_QUEUE_LENGTH 8U
 #define UART6_DMA_TX_BUFFER_SIZE  384U
-#define UART6_DMA_RX_BUFFER_SIZE  16U
+#define UART6_DMA_RX_BUFFER_SIZE  64U
 #define UART6_FULL_TELEMETRY_ENABLED 1U
 #define UART6_HIGH_SPEED_DUMP_INTERVAL_MS 50U
 #define UART6_HIGH_SPEED_DUMP_BATCH_SAMPLES 2U
@@ -70,6 +72,8 @@ volatile uint32_t main_flag = 0U;
 static volatile uint8_t uart1_trigger_active = 0U;
 static volatile uint32_t uart1_trigger_start_tick = 0U;
 static volatile uint8_t uart6_start_received = 0U;
+static volatile uint8_t uart6_arm_requested = 0U;
+static volatile uint8_t uart6_disarm_requested = 0U;
 static volatile uint8_t debug_bridge_mode_active = 0U;
 
 typedef enum
@@ -111,13 +115,23 @@ static void UART6_DMARxStart(void)
 
 static void UART6_DMATxRespond(uint16_t length)
 {
-  static const uint8_t started_text[] = {'S', 'T', 'A', 'R', 'T', 'E', 'D'};
-  static const uint8_t retry_text[] = {'R', 'E', 'T', 'R', 'Y'};
-  const uint8_t *tx_data;
-  uint16_t tx_length;
+  static const uint8_t started_text[] = "STARTED\r\n";
+  static const uint8_t retry_text[] = "RETRY\r\n";
+  static const uint8_t command_ack_text[] = "CMD_OK\r\n";
+  static const uint8_t command_error_text[] = "CMD_ERROR\r\n";
+  static const uint8_t arm_requested_text[] = "ARM_REQUESTED\r\n";
+  static const uint8_t disarm_requested_text[] = "DISARM_REQUESTED\r\n";
+  const uint8_t *tx_data = command_error_text;
+  uint16_t tx_length = (uint16_t)(sizeof(command_error_text) - 1U);
   char rx_text[UART6_DMA_RX_BUFFER_SIZE];
-  char *parse_end;
-  float rx_value;
+  char status_text[64];
+  unsigned long throttle_compare;
+  float roll_angle_deg;
+  float pitch_angle_deg;
+  float yaw_rate_dps;
+  char trailing_character;
+  int parsed_fields;
+  int status_length;
 
   while ((length > 0U) &&
          ((uart6_dma_rx_buffer[length - 1U] == '\r') || (uart6_dma_rx_buffer[length - 1U] == '\n')))
@@ -127,21 +141,16 @@ static void UART6_DMATxRespond(uint16_t length)
 
   if (uart6_start_received == 0U)
   {
-    if ((length == 5U) &&
-        (uart6_dma_rx_buffer[0] == 'S') &&
-        (uart6_dma_rx_buffer[1] == 'T') &&
-        (uart6_dma_rx_buffer[2] == 'A') &&
-        (uart6_dma_rx_buffer[3] == 'R') &&
-        (uart6_dma_rx_buffer[4] == 'T'))
+    if ((length == 5U) && (memcmp(uart6_dma_rx_buffer, "START", 5U) == 0))
     {
       uart6_start_received = 1U;
       tx_data = started_text;
-      tx_length = 7U;
+      tx_length = (uint16_t)(sizeof(started_text) - 1U);
     }
     else
     {
       tx_data = retry_text;
-      tx_length = 5U;
+      tx_length = (uint16_t)(sizeof(retry_text) - 1U);
     }
   }
   else
@@ -153,54 +162,52 @@ static void UART6_DMATxRespond(uint16_t length)
 
     memcpy(rx_text, uart6_dma_rx_buffer, length);
     rx_text[length] = '\0';
-    rx_value = strtof(rx_text, &parse_end);
 
-    if ((parse_end == rx_text) || (*parse_end != '\0'))
+    if (strcmp(rx_text, "ARM") == 0)
     {
+      uart6_arm_requested = 1U;
+      tx_data = arm_requested_text;
+      tx_length = (uint16_t)(sizeof(arm_requested_text) - 1U);
+    }
+    else if (strcmp(rx_text, "DISARM") == 0)
+    {
+      uart6_disarm_requested = 1U;
+      tx_data = disarm_requested_text;
+      tx_length = (uint16_t)(sizeof(disarm_requested_text) - 1U);
+    }
+    else if (strcmp(rx_text, "STATUS") == 0)
+    {
+      status_length = snprintf(status_text,
+                               sizeof(status_text),
+                               "STATE,%s,%s\r\n",
+                               flight_control_state_text(),
+                               flight_control_failsafe_text());
+      if ((status_length > 0) && (status_length < (int)sizeof(status_text)))
+      {
+        (void)UART6_DMATxEnqueue((const uint8_t *)status_text, (uint16_t)status_length);
+      }
       return;
-    }
-    else if (rx_value == 0.0f)
-    {
-      motor_set_angle_targets(0.0f, 0.0f);
-      tx_data = uart6_dma_rx_buffer;
-      tx_length = length;
-    }
-    else if (rx_value == 1.0f)
-    {
-      motor_set_angle_targets(motor_target_roll_angle_deg + 1.0f, motor_target_pitch_angle_deg);
-      tx_data = uart6_dma_rx_buffer;
-      tx_length = length;
-    }
-    else if (rx_value == 2.0f)
-    {
-      motor_set_angle_targets(motor_target_roll_angle_deg, motor_target_pitch_angle_deg - 1.0f);
-      tx_data = uart6_dma_rx_buffer;
-      tx_length = length;
-    }
-    else if (rx_value == 3.0f)
-    {
-      motor_set_angle_targets(motor_target_roll_angle_deg, motor_target_pitch_angle_deg + 1.0f);
-      tx_data = uart6_dma_rx_buffer;
-      tx_length = length;
-    }
-    else if (rx_value == 4.0f)
-    {
-      motor_set_angle_targets(motor_target_roll_angle_deg - 1.0f, motor_target_pitch_angle_deg);
-      tx_data = uart6_dma_rx_buffer;
-      tx_length = length;
-    }
-    else if ((rx_value >= 1000.0f) && (rx_value <= 2000.0f))
-    {
-      uint32_t ramp_duration_ms = (rx_value == 1000.0f) ? 1000U : 4000U;
-
-      uart6_rx_float_value = rx_value;
-      motor_set_throttle_ramp((uint32_t)rx_value, ramp_duration_ms);
-      tx_data = uart6_dma_rx_buffer;
-      tx_length = length;
     }
     else
     {
-      return;
+      parsed_fields = sscanf(rx_text,
+                             "CMD,%lu,%f,%f,%f %c",
+                             &throttle_compare,
+                             &roll_angle_deg,
+                             &pitch_angle_deg,
+                             &yaw_rate_dps,
+                             &trailing_character);
+      if ((parsed_fields == 4) &&
+          (throttle_compare <= UINT16_MAX) &&
+          flight_control_set_command((uint16_t)throttle_compare,
+                                     roll_angle_deg,
+                                     pitch_angle_deg,
+                                     yaw_rate_dps))
+      {
+        uart6_rx_float_value = (float)throttle_compare;
+        tx_data = command_ack_text;
+        tx_length = (uint16_t)(sizeof(command_ack_text) - 1U);
+      }
     }
   }
 
@@ -931,6 +938,8 @@ void debug_init(void)
   uart1_trigger_start_tick = 0U;
   uart6_rx_float_value = 0.0f;
   uart6_start_received = 0U;
+  uart6_arm_requested = 0U;
+  uart6_disarm_requested = 0U;
   debug_bridge_mode_active = 0U;
   high_speed_dump_phase = HIGH_SPEED_DUMP_IDLE;
   high_speed_dump_event_index = 0U;
@@ -967,6 +976,30 @@ void debug_set_bridge_mode(uint8_t active)
 
 void debug_process(void)
 {
+  static const uint8_t arm_ok_text[] = "ARM_OK\r\n";
+  static const uint8_t arm_denied_text[] = "ARM_DENIED\r\n";
+  static const uint8_t disarm_ok_text[] = "DISARM_OK\r\n";
+
+  if (uart6_disarm_requested != 0U)
+  {
+    uart6_disarm_requested = 0U;
+    flight_control_disarm(FLIGHT_FAILSAFE_USER);
+    (void)UART6_DMATxEnqueue(disarm_ok_text, (uint16_t)(sizeof(disarm_ok_text) - 1U));
+  }
+
+  if (uart6_arm_requested != 0U)
+  {
+    uart6_arm_requested = 0U;
+    if (flight_control_request_arm(battery_voltage, battery_valid))
+    {
+      (void)UART6_DMATxEnqueue(arm_ok_text, (uint16_t)(sizeof(arm_ok_text) - 1U));
+    }
+    else
+    {
+      (void)UART6_DMATxEnqueue(arm_denied_text, (uint16_t)(sizeof(arm_denied_text) - 1U));
+    }
+  }
+
   if ((uart1_trigger_active != 0U) &&
       ((HAL_GetTick() - uart1_trigger_start_tick) >= UART1_TRIGGER_HOLD_MS))
   {

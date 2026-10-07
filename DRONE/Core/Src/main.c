@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "bno085.h"
 #include "debug.h"
+#include "flight_control.h"
 #include "gnss.h"
 #include "high_speed_log.h"
 #include "motor.h"
@@ -88,6 +89,7 @@ uint8_t filter_filled = 0;
 
 float battery_voltage = 0.0f;
 int8_t battery_percent = 0;
+uint8_t battery_valid = 0U;
 uint32_t last_battery_check_time = 0;
 
 uint32_t user_step_throttle_compare = 1000U;
@@ -157,6 +159,7 @@ void Battery_Process(void) {
         if (percent < 0.0f) percent = 0.0f;
         
         battery_percent = (int8_t)percent;
+        battery_valid = 1U;
       }
     }
     HAL_ADC_Stop(&hadc1);
@@ -321,6 +324,13 @@ int main(void)
   (void)HAL_TIM_Base_Start_IT(&htim3);
 
   motor_init(&htim1);
+  flight_control_init();
+
+  OLED_Clear();
+  OLED_Printf(1, 0, "Flight Ready");
+  OLED_Printf(3, 0, "UART6: START");
+  OLED_Printf(5, 0, "P: Emergency Stop");
+  OLED_Update();
 
   /* USER CODE END 2 */
 
@@ -353,34 +363,20 @@ int main(void)
     //if (imuimu == 1) {
     //  (void)uart1_printf("IMU\r\n");
     //}
-    if (sw_u_flag && (high_speed_log_dump_requested() == 0U)) {
-      HAL_Delay(100);
-      motor_reset_rate_pid();
-      motor_set_throttle(1060U);
-      motor_set_rate_targets(0, 0, 0);
-      motor_set_angle_targets(0.0f, 0.0f);
+    if (sw_p_flag != 0U) {
+      flight_control_disarm(FLIGHT_FAILSAFE_USER);
+    }
+    if ((GPIOC->IDR & GPIO_PIN_8) == 0U) {
+      flight_control_disarm(FLIGHT_FAILSAFE_EMERGENCY_INPUT);
+    }
+    if (sw_d_flag != 0U) {
+      flight_control_disarm(FLIGHT_FAILSAFE_USER);
+      high_speed_log_stop();
+      high_speed_log_request_dump();
+    }
+    if (main_flag != 0U) {
       main_flag = 0U;
-      high_speed_log_start();
-      while (1) {
-        switch_update();
-        if (main_flag != 0U) {
-          main_flag = 0U;
-          sensor_process();
-          motor_rate_pid_update();
-        }
-        debug_process();
-
-        if ((sw_d_flag) || ((GPIOC->IDR & GPIO_PIN_8) == 0U)) {
-          uint8_t dump_high_speed_log = sw_d_flag;
-
-          motor_stop();
-          high_speed_log_stop();
-          if (dump_high_speed_log != 0U) {
-            high_speed_log_request_dump();
-          }
-          break;
-        }
-      }
+      flight_control_process(battery_voltage, battery_valid);
     }
   }
   /* USER CODE END 3 */
