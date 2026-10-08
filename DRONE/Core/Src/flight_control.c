@@ -2,6 +2,7 @@
 
 #include "high_speed_log.h"
 #include "motor.h"
+#include "navigation.h"
 #include "sensor.h"
 
 #include <math.h>
@@ -20,6 +21,7 @@
 #define FLIGHT_LOW_BATTERY_HOLD_MS          2000U
 #define FLIGHT_COMMAND_TIMEOUT_MS             500U
 #define FLIGHT_IMU_TIMEOUT_MS                  20U
+#define FLIGHT_GPS_TIMEOUT_MS                1000U
 
 typedef struct
 {
@@ -31,8 +33,9 @@ typedef struct
   uint8_t valid;
 } flight_command_t;
 
-static flight_state_t flight_state = FLIGHT_STATE_DISARMED;
-static flight_failsafe_reason_t failsafe_reason = FLIGHT_FAILSAFE_NONE;
+static volatile flight_state_t flight_state = FLIGHT_STATE_DISARMED;
+static volatile flight_mode_t flight_mode = FLIGHT_MODE_ANGLE;
+static volatile flight_failsafe_reason_t failsafe_reason = FLIGHT_FAILSAFE_NONE;
 static volatile flight_command_t command;
 static uint32_t low_battery_start_tick_ms = 0U;
 
@@ -94,6 +97,8 @@ void flight_control_init(void)
   low_battery_start_tick_ms = 0U;
   failsafe_reason = FLIGHT_FAILSAFE_NONE;
   flight_state = FLIGHT_STATE_DISARMED;
+  flight_mode = FLIGHT_MODE_ANGLE;
+  navigation_init();
   motor_set_armed(0U);
 }
 
@@ -103,6 +108,11 @@ bool flight_control_set_command(uint16_t throttle_compare,
                                 float yaw_rate_dps)
 {
   uint32_t primask;
+
+  if (flight_mode != FLIGHT_MODE_ANGLE)
+  {
+    return false;
+  }
 
   if ((!isfinite(roll_angle_deg)) ||
       (!isfinite(pitch_angle_deg)) ||
@@ -141,6 +151,94 @@ bool flight_control_set_command(uint16_t throttle_compare,
   return true;
 }
 
+bool flight_control_set_mode(flight_mode_t mode)
+{
+  uint32_t primask;
+
+  if ((mode != FLIGHT_MODE_ANGLE) && (mode != FLIGHT_MODE_GPS))
+  {
+    return false;
+  }
+  if (flight_state != FLIGHT_STATE_DISARMED)
+  {
+    return false;
+  }
+
+  primask = __get_PRIMASK();
+  __disable_irq();
+  flight_mode = mode;
+  command.throttle_compare = FLIGHT_THROTTLE_MIN_COMPARE;
+  command.roll_angle_deg = 0.0f;
+  command.pitch_angle_deg = 0.0f;
+  command.yaw_rate_dps = 0.0f;
+  command.received_tick_ms = 0U;
+  command.valid = 0U;
+  if (primask == 0U)
+  {
+    __enable_irq();
+  }
+  navigation_clear_target();
+  return true;
+}
+
+bool flight_control_set_gps_target(int32_t latitude_deg_1e7,
+                                   int32_t longitude_deg_1e7,
+                                   uint16_t throttle_compare)
+{
+  uint32_t primask;
+
+  if (flight_mode != FLIGHT_MODE_GPS)
+  {
+    return false;
+  }
+  if (!navigation_set_target(latitude_deg_1e7, longitude_deg_1e7))
+  {
+    return false;
+  }
+
+  if (throttle_compare < FLIGHT_THROTTLE_MIN_COMPARE)
+  {
+    throttle_compare = FLIGHT_THROTTLE_MIN_COMPARE;
+  }
+  else if (throttle_compare > FLIGHT_THROTTLE_MAX_COMPARE)
+  {
+    throttle_compare = FLIGHT_THROTTLE_MAX_COMPARE;
+  }
+
+  primask = __get_PRIMASK();
+  __disable_irq();
+  command.throttle_compare = throttle_compare;
+  command.roll_angle_deg = 0.0f;
+  command.pitch_angle_deg = 0.0f;
+  command.yaw_rate_dps = 0.0f;
+  command.received_tick_ms = HAL_GetTick();
+  command.valid = 1U;
+  if (primask == 0U)
+  {
+    __enable_irq();
+  }
+  return true;
+}
+
+bool flight_control_refresh_command(void)
+{
+  uint32_t primask;
+
+  if (command.valid == 0U)
+  {
+    return false;
+  }
+
+  primask = __get_PRIMASK();
+  __disable_irq();
+  command.received_tick_ms = HAL_GetTick();
+  if (primask == 0U)
+  {
+    __enable_irq();
+  }
+  return true;
+}
+
 bool flight_control_request_arm(float battery_voltage, uint8_t battery_valid)
 {
   uint32_t now = HAL_GetTick();
@@ -163,6 +261,11 @@ bool flight_control_request_arm(float battery_voltage, uint8_t battery_valid)
       (FlightAttitudeFinite() == 0U) ||
       (fabsf(sensor_roll_deg) > FLIGHT_MAX_ARM_TILT_DEG) ||
       (fabsf(sensor_pitch_deg) > FLIGHT_MAX_ARM_TILT_DEG))
+  {
+    return false;
+  }
+  if ((flight_mode == FLIGHT_MODE_GPS) &&
+      (!navigation_is_ready(FLIGHT_GPS_TIMEOUT_MS)))
   {
     return false;
   }
@@ -189,6 +292,7 @@ void flight_control_disarm(flight_failsafe_reason_t reason)
   command.pitch_angle_deg = 0.0f;
   command.yaw_rate_dps = 0.0f;
   command.valid = 0U;
+  navigation_clear_target();
   low_battery_start_tick_ms = 0U;
   failsafe_reason = reason;
   flight_state = (reason == FLIGHT_FAILSAFE_NONE || reason == FLIGHT_FAILSAFE_USER) ?
@@ -199,6 +303,8 @@ void flight_control_process(float battery_voltage, uint8_t battery_valid)
 {
   uint32_t now;
   flight_command_t current_command;
+  float roll_target_deg;
+  float pitch_target_deg;
 
   if (flight_state != FLIGHT_STATE_ARMED)
   {
@@ -245,15 +351,34 @@ void flight_control_process(float battery_voltage, uint8_t battery_valid)
     low_battery_start_tick_ms = 0U;
   }
 
+  roll_target_deg = current_command.roll_angle_deg;
+  pitch_target_deg = current_command.pitch_angle_deg;
+  if (flight_mode == FLIGHT_MODE_GPS)
+  {
+    if ((!navigation_is_ready(FLIGHT_GPS_TIMEOUT_MS)) ||
+        (!navigation_compute_attitude_targets(&roll_target_deg, &pitch_target_deg)))
+    {
+      FlightEnterFailsafe(FLIGHT_FAILSAFE_GPS_TIMEOUT);
+      return;
+    }
+  }
+
   motor_set_throttle(current_command.throttle_compare);
-  motor_set_angle_targets(current_command.roll_angle_deg, current_command.pitch_angle_deg);
-  motor_set_rate_targets(0.0f, 0.0f, current_command.yaw_rate_dps);
+  motor_set_angle_targets(roll_target_deg, pitch_target_deg);
+  motor_set_rate_targets(0.0f,
+                         0.0f,
+                         (flight_mode == FLIGHT_MODE_ANGLE) ? current_command.yaw_rate_dps : 0.0f);
   motor_rate_pid_update();
 }
 
 flight_state_t flight_control_get_state(void)
 {
   return flight_state;
+}
+
+flight_mode_t flight_control_get_mode(void)
+{
+  return flight_mode;
 }
 
 flight_failsafe_reason_t flight_control_get_failsafe_reason(void)
@@ -272,6 +397,11 @@ const char *flight_control_state_text(void)
   }
 }
 
+const char *flight_control_mode_text(void)
+{
+  return (flight_mode == FLIGHT_MODE_GPS) ? "GPS" : "ANGLE";
+}
+
 const char *flight_control_failsafe_text(void)
 {
   switch (failsafe_reason)
@@ -282,6 +412,7 @@ const char *flight_control_failsafe_text(void)
     case FLIGHT_FAILSAFE_EXCESSIVE_TILT: return "EXCESSIVE_TILT";
     case FLIGHT_FAILSAFE_LOW_BATTERY: return "LOW_BATTERY";
     case FLIGHT_FAILSAFE_EMERGENCY_INPUT: return "EMERGENCY_INPUT";
+    case FLIGHT_FAILSAFE_GPS_TIMEOUT: return "GPS_TIMEOUT";
     case FLIGHT_FAILSAFE_NONE:
     default: return "NONE";
   }
