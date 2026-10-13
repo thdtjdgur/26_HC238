@@ -170,8 +170,9 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
 | **지상로봇** | MPPI 경로 생성·평가, PID/FOC 기반 좌우 BLDC 모터 제어 | [`ground_station_robot`](ground_station_robot/) |
 | **N6 Edge AI** | Neural-ART NPU 기반 YOLOv8n 사람 탐지, GPIO 검출 이벤트 출력 | [`N6/src/main.c`](N6/src/main.c) |
 | **LoRa 지상 통신기** | TDMA 기반 UAV·UGV·AR 통신 스케줄링, RTCM 보정 데이터 분할 전송 | [`TTGO/include/master_scheduler.h`](TTGO/include/master_scheduler.h) |
+| **AR 기기** | 반투과형 HUD 화면 보정, eCompass 방위각 계산, GNSS 위치의 LoRa 전송 | [`Core/Src`](Core/Src/) |
 
-아래에는 **드론 비행제어, 지상로봇 제어, N6 사람 검출 및 LoRa 통신의 핵심 코드**를 장비별로 소개합니다. 각 코드의 적용 장비와 소스 파일은 해당 항목에서 확인할 수 있습니다.
+아래에는 **드론 비행제어, 지상로봇 제어, N6 사람 검출, LoRa 통신 및 AR 기기의 핵심 코드**를 장비별로 소개합니다. 각 코드의 적용 장비와 소스 파일은 해당 항목에서 확인할 수 있습니다.
 
 ### 5.2 전체 디렉터리 구성
 
@@ -523,3 +524,114 @@ AR 확장을 포함한 설계 기준으로, **UGV → UAV → AR 기기** 순서
 3. UAV 슬롯에서는 Poll 요청으로 송신 권한을 부여하고, GPS 좌표와 사람 탐지 정보를 수신합니다.
 4. AR 슬롯에서는 Poll 요청으로 송신 권한을 부여하고, GPS 좌표와 현장 기기 상태를 수신합니다.
 5. 슬롯 사이에 보호 시간을 적용하고, 응답 시간 초과 시 다음 슬롯으로 전환해 전체 주기와 통신 순서를 유지합니다.
+
+### 5.15 AR 기기 - 반투과형 HUD 화면 보정
+
+- **적용 장비:** STM32F401 기반 AR HUD 제어기와 ST7789 디스플레이
+- **광학 원리:** 디스플레이에서 나온 빛은 프리즘 또는 빔스플리터와 같은 반투과형 광학 부품에서 반사되어 사용자의 눈으로 들어옵니다. 외부 환경의 빛은 같은 광학 부품을 통과하므로 실제 시야 위에 HUD 정보가 겹쳐 보입니다. 한 번의 반사로 화면의 좌우가 바뀌기 때문에 펌웨어에서 영상을 미리 좌우 반전해, 렌즈를 통해 보았을 때 글자와 방향이 정상으로 보이도록 보정합니다.
+- **소스코드 설명:** [`Core/Inc/st7789.h`](Core/Inc/st7789.h)는 HUD 장착 방향과 광학 반사를 고려해 화면 회전과 거울 모드를 설정합니다. [`Core/Src/st7789.c`](Core/Src/st7789.c)는 ST7789의 `MADCTL` 레지스터에서 현재 회전에 대응하는 축 반전 비트를 바꿉니다.
+
+```c
+#define ST7789_ROTATION 3
+#define ST7789_MIRROR_X 1
+
+void ST7789_SetRotation(uint8_t m)
+{
+    uint8_t madctl;
+
+    switch (m) {
+    case 0:
+        madctl = ST7789_MADCTL_MX | ST7789_MADCTL_MY | ST7789_MADCTL_RGB;
+        break;
+    case 1:
+        madctl = ST7789_MADCTL_MY | ST7789_MADCTL_MV | ST7789_MADCTL_RGB;
+        break;
+    case 2:
+        madctl = ST7789_MADCTL_RGB;
+        break;
+    case 3:
+        madctl = ST7789_MADCTL_MX | ST7789_MADCTL_MV | ST7789_MADCTL_RGB;
+        break;
+    default:
+        return;
+    }
+
+#if ST7789_MIRROR_X
+    if ((madctl & ST7789_MADCTL_MV) != 0)
+        madctl ^= ST7789_MADCTL_MY;
+    else
+        madctl ^= ST7789_MADCTL_MX;
+#endif
+
+    ST7789_WriteCommand(ST7789_MADCTL);
+    ST7789_WriteSmallData(madctl);
+}
+```
+
+### 5.16 AR 기기 - 자력계 보정과 방위각 계산
+
+- **적용 장비:** AR 헬멧의 HMC5883L 자력계와 MPU6050 자세 센서
+- **소스코드 설명:** [`Core/Src/magcalib.c`](Core/Src/magcalib.c)는 타원체 피팅으로 구한 중심 오프셋 `b`와 보정 행렬 `A`를 자력계 측정값에 적용합니다. [`Core/Src/hmc5883l.c`](Core/Src/hmc5883l.c)는 Roll과 Pitch로 자력 벡터의 기울기를 보정한 뒤 `atan2`로 자북 기준 방위각을 계산합니다. 헬멧이 기울어진 상태에서도 HUD의 방향 정보가 안정적으로 유지됩니다.
+
+```c
+void MagCalib_Apply(const MagCalib_t *cal,
+                    float Mx, float My, float Mz, float *out)
+{
+    double v[3] = {
+        (double)Mx - cal->b[0],
+        (double)My - cal->b[1],
+        (double)Mz - cal->b[2]
+    };
+
+    double result[3];
+    mat3_mul_vec(cal->A, v, result);
+
+    out[0] = (float)result[0];
+    out[1] = (float)result[1];
+    out[2] = (float)result[2];
+}
+
+float By2 = Bz * sinf(roll_rad) - By * cosf(roll_rad);
+float Bz2 = By * sinf(roll_rad) + Bz * cosf(roll_rad);
+float Bx3 = Bx * cosf(pitch_rad) + Bz2 * sinf(pitch_rad);
+
+float heading_deg = atan2f(By2, Bx3) * (180.0f / M_PI);
+if (heading_deg < 0.0f) {
+    heading_deg += 360.0f;
+}
+data->heading = heading_deg;
+```
+
+### 5.17 AR 기기 - GPS 좌표 LoRa 전송
+
+- **적용 장비:** AR 헬멧의 NEO-M8N GNSS와 SX1276 LoRa 모듈
+- **소스코드 설명:** [`Core/Src/main.c`](Core/Src/main.c)는 지상국 Poll 패킷의 순번을 유지하면서 헬멧의 현재 위도·경도를 `1e-7도` 단위 정수로 직렬화합니다. 송신 패킷에는 출발지, 목적지, 좌표와 GPS 유효 상태가 포함되며, 전송이 끝나면 즉시 연속 수신 모드로 복귀합니다.
+
+```c
+static bool A4_SendGpsResponse(uint16_t seq)
+{
+    uint8_t p[A4_HDR_LEN + 9];
+    int32_t lat = 0, lon = 0;
+    uint8_t valid = 0;
+
+    if (gps.data.valid) {
+        lat   = Deg_To_1e7(gps.data.latitude);
+        lon   = Deg_To_1e7(gps.data.longitude);
+        valid = 1;
+    }
+
+    p[0] = A4_HDR;
+    p[1] = A4_ID_HELMET;
+    p[2] = A4_ID_BASE;
+    p[3] = A4_TYPE_UAV_GPS;
+    A4_PutU16(&p[4], seq);
+    p[6] = 9;
+    A4_PutI32(&p[7],  lat);
+    A4_PutI32(&p[11], lon);
+    p[15] = valid;
+
+    bool ok = LoRa_SendPacket(p, (uint8_t)sizeof(p), LORA_TX_TIMEOUT);
+    LoRa_RxSet();
+    return ok;
+}
+```
