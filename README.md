@@ -62,40 +62,13 @@ ProSearch는 재난 현장에서 드론, 지상로봇, AR 기기와 지상국을
 
 ## 👥 2. 팀원 소개
 
-<table width="100%">
-  <tr>
-    <td align="center" width="33%">
-      <img src="docs/images/team/song-seonghyeok.png" width="170" alt="송성혁"><br>
-      <strong>송성혁</strong><br>
-      팀장 · 지상로봇 개발
-    </td>
-    <td align="center" width="33%">
-      <img src="docs/images/team/park-gyuhyeon.png" width="170" alt="박규현"><br>
-      <strong>박규현</strong><br>
-      드론 비행제어보드 개발
-    </td>
-    <td align="center" width="33%">
-      <img src="docs/images/team/im-songju.png" width="170" alt="임송주"><br>
-      <strong>임송주</strong><br>
-      드론 제어
-    </td>
-  </tr>
-</table>
-
-<table width="100%">
-  <tr>
-    <td align="center" width="50%">
-      <img src="docs/images/team/hong-soonhyun.png" width="170" alt="홍순현"><br>
-      <strong>홍순현</strong><br>
-      지상국 및 기기 간 통신 개발
-    </td>
-    <td align="center" width="50%">
-      <img src="docs/images/team/kim-juwon.png" width="170" alt="김주원"><br>
-      <strong>김주원</strong><br>
-      AR 기기 개발
-    </td>
-  </tr>
-</table>
+| 구분 | 담당 역할 |
+| --- | --- |
+| **팀장** | 지상로봇 개발 |
+| **팀원 1** | 드론 비행제어보드 개발 |
+| **팀원 2** | 드론 제어 |
+| **팀원 3** | 지상국 및 기기 간 통신 개발 |
+| **팀원 4** | AR 기기 개발 |
 
 <br><br>
 
